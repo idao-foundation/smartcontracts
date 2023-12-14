@@ -7,7 +7,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 /**
- * @dev SlotManager manages address slots and slot limits.
+ * @notice SlotManager manages address slots and slot limits.
  */
 contract SlotManager is
     Initializable,
@@ -25,7 +25,7 @@ contract SlotManager is
     mapping(address => uint256) public slotLimits;
 
     /**
-     * @dev Initializes the contract.
+     * @notice Initializes the contract.
      * @param upgrader_ The address of the upgrader role.
      * @param initialAuthority_ The authority that manages this contract.
      * @param globalSlotLimit_ The initial global slot limit.
@@ -44,7 +44,7 @@ contract SlotManager is
     }
 
     /**
-     * @dev Redeems one slot for the specified address.
+     * @notice Redeems one slot for the specified address.
      * @param _account The address to redeem a slot for.
      */
     function redeemSlot(address _account) external restricted {
@@ -55,7 +55,7 @@ contract SlotManager is
     }
 
     /**
-     * @dev Frees up one slot for the specified address.
+     * @notice Frees up one slot for the specified address.
      * @param _account The address to free up a slot for.
      */
     function freeSlot(address _account) external restricted {
@@ -66,7 +66,7 @@ contract SlotManager is
     }
 
     /**
-     * @dev Allows the admin to edit the global slot limit.
+     * @notice Allows the admin to edit the global slot limit.
      * @param _slotAmount The updated global slot limit.
      */
     function editGlobalSlotLimit(uint256 _slotAmount) external restricted {
@@ -74,7 +74,7 @@ contract SlotManager is
     }
 
     /**
-     * @dev Allows the admin to override the slot limit for a specific address.
+     * @notice Allows the admin to override the slot limit for a specific address.
      * @param _account The address to update the slot limit for.
      * @param _slotAmount The updated slot limit for the address.
      */
@@ -86,7 +86,7 @@ contract SlotManager is
     }
 
     /**
-     * @dev Retrieves the available slots for a specific address.
+     * @notice Retrieves the available slots for a specific address.
      * @param _account The address to check for available slots.
      * @return The available number of slots at the specified address.
      */

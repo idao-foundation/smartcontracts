@@ -56,7 +56,7 @@ describe('SlotManager', () => {
     describe('Initialize', async () => {
         it('should initialize the contract correctly', async () => {
             /* ASSERT */
-            const [isAdmin,] = await manager.hasRole(0, admin.address);
+            const [isAdmin,] = await manager.hasRole(DEFAULT_ADMIN_ROLE, admin.address);
             expect(isAdmin).to.equal(true);
 
             const [isSlotManager,] = await manager.hasRole(SLOT_MANAGER_ROLE, slotManagerRole.address);
