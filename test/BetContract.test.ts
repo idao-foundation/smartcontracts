@@ -35,7 +35,7 @@ describe('BetContract', () => {
     let addr1: HardhatEthersSigner;
     const globalSlotLimit = 5;
     const nativeFeeAmount = 1;
-    const DEFAULT_ADMIN_ROLE = 0n;
+    const ADMIN_ROLE = 0n;
     const SLOT_MANAGER_ROLE = 1n;
 
     beforeEach(async () => {
@@ -58,8 +58,6 @@ describe('BetContract', () => {
 
         await setFunctionRole(admin, manager, slotManager.target, 'redeemSlot(address)', SLOT_MANAGER_ROLE);
         await setFunctionRole(admin, manager, slotManager.target, 'freeSlot(address)', SLOT_MANAGER_ROLE);
-        await setFunctionRole(admin, manager, slotManager.target, 'editGlobalSlotLimit(uint256)', DEFAULT_ADMIN_ROLE);
-        await setFunctionRole(admin, manager, slotManager.target, 'overrideSlotLimit(address,uint256)', DEFAULT_ADMIN_ROLE);
 
         const BetContract = (await ethers.getContractFactory('BetContract')) as BetContract__factory;
         betContract = await upgrades.deployProxy(
@@ -67,18 +65,12 @@ describe('BetContract', () => {
             [manager.target, nativeFeeAmount],
             { initializer: 'initialize', kind: 'uups' }
         ) as unknown as BetContract;
-
-        await setFunctionRole(admin, manager, betContract.target, 'createPool(bool,string,address,uint256[])', DEFAULT_ADMIN_ROLE);
-        await setFunctionRole(admin, manager, betContract.target, 'setPoolStatus(uint256,bool)', DEFAULT_ADMIN_ROLE);
-        await setFunctionRole(admin, manager, betContract.target, 'editPool(uint256,bool,string,address,uint256[])', DEFAULT_ADMIN_ROLE);
-        await setFunctionRole(admin, manager, betContract.target, 'rescueERC20OrNative(address,address,uint256)', DEFAULT_ADMIN_ROLE);
-        await setFunctionRole(admin, manager, betContract.target, 'setNativeFeeAmount(uint256)', DEFAULT_ADMIN_ROLE);
     });
 
     describe('Initialize', async () => {
         it('should initialize the contract correctly', async () => {
             /* ASSERT */
-            const [isAdmin,] = await manager.hasRole(DEFAULT_ADMIN_ROLE, admin.address);
+            const [isAdmin,] = await manager.hasRole(ADMIN_ROLE, admin.address);
             expect(isAdmin).to.equal(true);
 
             const nativeFee = await betContract.nativeFeeAmount();
@@ -115,7 +107,7 @@ describe('BetContract', () => {
             );
         });
 
-        it('rejects if not default admin role', async () => {
+        it('rejects if not admin role', async () => {
             /* SETUP */
             const newNativeFee = 20;
 
@@ -194,7 +186,7 @@ describe('BetContract', () => {
             expect(ownerBalanceAfter).to.be.equal(ownerBalanceBefore + amount - fee);
         });
 
-        it('rejects if not default admin role', async function () {
+        it('rejects if not admin role', async function () {
             /* SETUP */
             const amount = ethers.parseUnits('1', 18);
 
@@ -266,7 +258,7 @@ describe('BetContract', () => {
                 .to.be.revertedWithCustomError(betContract, "ZeroAddress");
         });
 
-        it('rejects if not default admin role', async function () {
+        it('rejects if not admin role', async function () {
             /* SETUP */
             const active = true;
             const name = 'New Pool';
@@ -328,7 +320,7 @@ describe('BetContract', () => {
             );
         });
 
-        it('rejects if not default admin role', async function () {
+        it('rejects if not admin role', async function () {
             /* SETUP */
             const poolCount = await betContract.poolLength();
             const poolId = poolCount - 1n;
@@ -437,7 +429,7 @@ describe('BetContract', () => {
             );
         });
 
-        it('rejects if not default admin role', async function () {
+        it('rejects if not admin role', async function () {
             /* SETUP */
             const active = true;
             const name = 'New Pool';
@@ -510,17 +502,35 @@ describe('BetContract', () => {
         });
     });
 
-    it.only("upgrade",async () => {
-        const factory = await ethers.getContractFactory("BetContract");
-        const newImplementation = await factory.deploy();
+    describe('upgradeToAndCall', async () => {
+        let newImplementation: BetContract;
+    
+        beforeEach(async () => {
+            const factory = await ethers.getContractFactory("BetContract");
+            newImplementation = await factory.deploy();
+        });
 
-        const implBefore = await upgrades.erc1967.getImplementationAddress(betContract.target as string);
+        it('should upgrade to a new implementation', async () => {
+            /* SETUP */
+            const implementationBefore = await upgrades.erc1967.getImplementationAddress(betContract.target as string);
 
-        await betContract.connect(admin).upgradeToAndCall(newImplementation.target, "0x");
+            /* EXECUTE */
+            await betContract.connect(admin).upgradeToAndCall(newImplementation.target, "0x");
 
-        const implAfter = await upgrades.erc1967.getImplementationAddress(betContract.target as string);
+            /* ASSERT */
+            const implementationAfter = await upgrades.erc1967.getImplementationAddress(betContract.target as string);
 
-        expect(implBefore).not.to.equal(implAfter);
+            expect(implementationBefore).not.to.equal(implementationAfter);
+        });
 
-    })
+        it('rejects if not admin role', async function () {
+            /* EXECUTE */
+            const promise = betContract.connect(addr1).upgradeToAndCall(newImplementation.target, "0x");
+
+            /* ASSERT */
+            await expect(promise).to.be.revertedWithCustomError(
+                slotManager, 'AccessManagedUnauthorized'
+            ).withArgs(addr1.address);
+        });
+    });
 });

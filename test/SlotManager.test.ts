@@ -30,7 +30,7 @@ describe('SlotManager', () => {
     let upgrader: HardhatEthersSigner;
     let addr1: HardhatEthersSigner;
     const globalSlotLimit = 5;
-    const DEFAULT_ADMIN_ROLE = 0n;
+    const ADMIN_ROLE = 0n;
     const SLOT_MANAGER_ROLE = 1n;
 
     beforeEach(async () => {
@@ -50,14 +50,12 @@ describe('SlotManager', () => {
 
         await setFunctionRole(admin, manager, slotManager.target, 'redeemSlot(address)', SLOT_MANAGER_ROLE);
         await setFunctionRole(admin, manager, slotManager.target, 'freeSlot(address)', SLOT_MANAGER_ROLE);
-        await setFunctionRole(admin, manager, slotManager.target, 'editGlobalSlotLimit(uint256)', DEFAULT_ADMIN_ROLE);
-        await setFunctionRole(admin, manager, slotManager.target, 'overrideSlotLimit(address,uint256)', DEFAULT_ADMIN_ROLE);
     });
 
     describe('Initialize', async () => {
         it('should initialize the contract correctly', async () => {
             /* ASSERT */
-            const [isAdmin,] = await manager.hasRole(DEFAULT_ADMIN_ROLE, admin.address);
+            const [isAdmin,] = await manager.hasRole(ADMIN_ROLE, admin.address);
             expect(isAdmin).to.equal(true);
 
             const [isSlotManager,] = await manager.hasRole(SLOT_MANAGER_ROLE, slotManagerRole.address);
@@ -100,7 +98,7 @@ describe('SlotManager', () => {
 
         it('rejects if not slot manager role', async () => {
             /* SETUP */
-            const account = addr1.address;
+            const account = Math.floor(Math.random() * 2) === 1 ? addr1.address : admin.address;
 
             /* EXECUTE */
             const promise = slotManager.connect(addr1).redeemSlot(account);
@@ -144,7 +142,7 @@ describe('SlotManager', () => {
 
         it('rejects if not slot manager role', async () => {
             /* SETUP */
-            const account = addr1.address;
+            const account = Math.floor(Math.random() * 2) === 1 ? addr1.address : admin.address;
 
             /* EXECUTE */
             const promise = slotManager.connect(addr1).freeSlot(account);
@@ -172,7 +170,7 @@ describe('SlotManager', () => {
             expect(globalSlotLimitAfter).to.equal(newGlobalSlotLimit);
         });
 
-        it('rejects if not default admin role', async () => {
+        it('rejects if not admin role', async () => {
             /* SETUP */
             const newGlobalSlotLimit = 20;
 
@@ -203,7 +201,7 @@ describe('SlotManager', () => {
             expect(slotLimitAfter).to.equal(newSlotLimit);
         });
 
-        it('rejects if not default admin role', async () => {
+        it('rejects if not admin role', async () => {
             /* SETUP */
             const account = addr1.address;
             const newSlotLimit = 2;
@@ -250,6 +248,38 @@ describe('SlotManager', () => {
 
             expect(availableSlots).to.equal(globalSlotLimit);
             expect(availableSlots).to.equal(0);
+        });
+    });
+
+    describe('upgradeToAndCall', async () => {
+        let newImplementation: SlotManager;
+    
+        beforeEach(async () => {
+            const factory = await ethers.getContractFactory("SlotManager");
+            newImplementation = await factory.deploy();
+        });
+
+        it('should upgrade to a new implementation', async () => {
+            /* SETUP */
+            const implementationBefore = await upgrades.erc1967.getImplementationAddress(slotManager.target as string);
+
+            /* EXECUTE */
+            await slotManager.connect(admin).upgradeToAndCall(newImplementation.target, "0x");
+
+            /* ASSERT */
+            const implementationAfter = await upgrades.erc1967.getImplementationAddress(slotManager.target as string);
+
+            expect(implementationBefore).not.to.equal(implementationAfter);
+        });
+
+        it('rejects if not admin role', async function () {
+            /* EXECUTE */
+            const promise = slotManager.connect(addr1).upgradeToAndCall(newImplementation.target, "0x");
+
+            /* ASSERT */
+            await expect(promise).to.be.revertedWithCustomError(
+                slotManager, 'AccessManagedUnauthorized'
+            ).withArgs(addr1.address);
         });
     });
 });
