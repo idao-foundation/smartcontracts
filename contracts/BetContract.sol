@@ -1,19 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.23;
 
-import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/manager/AccessManagedUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
-
-// TODO: fix imports
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract BetContract is
     Initializable,
-    AccessControlUpgradeable,
     AccessManagedUpgradeable,
     UUPSUpgradeable
 {
@@ -32,10 +28,13 @@ contract BetContract is
     error AmountIsZero();
     error ZeroAddress();
     error PoolDoesNotExist();
+    error UpgradeDenied();
 
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
 
     uint256 private nativeFee;
+
+    bool private allowUpgrade;
 
     PoolInfo[] private pools;
 
@@ -61,20 +60,16 @@ contract BetContract is
 
     /**
      * @notice Initializes the contract.
-     * @param upgrader_ The address of the upgrader role.
      * @param initialAuthority_ The authority that manages this contract.
      * @param nativeFee_ The native fee that takes when a user places a bet.
      */
     function initialize(
-        address upgrader_,
         address initialAuthority_,
         uint256 nativeFee_
     ) external initializer {
-        __AccessControl_init();
         __AccessManaged_init(initialAuthority_);
         __UUPSUpgradeable_init();
 
-        _grantRole(UPGRADER_ROLE, upgrader_);
         nativeFee = nativeFee_;
     }
 
@@ -277,7 +272,20 @@ contract BetContract is
         )
     {}
 
-    function _authorizeUpgrade(
-        address newImplementation
-    ) internal override onlyRole(UPGRADER_ROLE) {}
+    function upgradeToAndCall(
+        address newImplementation,
+        bytes memory data
+    ) public payable override restricted {
+        allowUpgrade = true;
+
+        super.upgradeToAndCall(newImplementation, data);
+    }
+
+    function _authorizeUpgrade(address) internal override {
+        if (!allowUpgrade) {
+            // This path may not be reachable
+            revert UpgradeDenied();
+        }
+        allowUpgrade = false;
+    }
 }

@@ -1,14 +1,15 @@
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers"
-import { Manager__factory } from "../typechain-types/factories/contracts/Manager__factory";
 import { Manager } from "../typechain-types/contracts/Manager";
 import { SlotManager__factory } from "../typechain-types/factories/contracts/SlotManager__factory";
+import { AccessManager, AccessManager__factory, SlotManager } from "../typechain-types";
+import { Addressable } from "ethers";
 
 async function setFunctionRole(
     admin: HardhatEthersSigner,
-    manager: any,
-    target: string,
+    manager: AccessManager,
+    target: string | Addressable,
     funcSig: string,
     role: bigint
 ) {
@@ -23,7 +24,7 @@ async function setFunctionRole(
 
 describe('SlotManager', () => {
     let manager: Manager;
-    let slotManager: any;
+    let slotManager: SlotManager;
     let admin: HardhatEthersSigner;
     let slotManagerRole: HardhatEthersSigner;
     let upgrader: HardhatEthersSigner;
@@ -35,15 +36,15 @@ describe('SlotManager', () => {
     beforeEach(async () => {
         [admin, slotManagerRole, upgrader, addr1] = await ethers.getSigners();
 
-        const Manager = (await ethers.getContractFactory('Manager')) as Manager__factory;
+        const Manager = (await ethers.getContractFactory('AccessManager')) as AccessManager__factory;
         manager = await Manager.deploy(admin.address);
 
         const SlotManager = (await ethers.getContractFactory('SlotManager')) as SlotManager__factory;
         slotManager = await upgrades.deployProxy(
             SlotManager,
-            [upgrader.address, manager.target, globalSlotLimit],
+            [manager.target, globalSlotLimit],
             { initializer: 'initialize', kind: 'uups' }
-        );
+        ) as unknown as SlotManager;
 
         await manager.connect(admin).grantRole(SLOT_MANAGER_ROLE, slotManagerRole.address, 0);
 
@@ -61,8 +62,6 @@ describe('SlotManager', () => {
 
             const [isSlotManager,] = await manager.hasRole(SLOT_MANAGER_ROLE, slotManagerRole.address);
             expect(isSlotManager).to.equal(true);
-
-            expect(await slotManager.hasRole(await slotManager.UPGRADER_ROLE(), upgrader.address)).to.true;
 
             const globalSlotLimit = await slotManager.globalSlotLimit();
             expect(globalSlotLimit).to.equal(globalSlotLimit);

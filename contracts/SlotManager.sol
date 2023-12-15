@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.23;
 
-import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/manager/AccessManagedUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
@@ -11,35 +10,32 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
  */
 contract SlotManager is
     Initializable,
-    AccessControlUpgradeable,
     AccessManagedUpgradeable,
     UUPSUpgradeable
 {
     error SlotLimitReached();
     error NoSlotsToFree();
+    error UpgradeDenied();
 
-    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
 
     uint256 public globalSlotLimit;
+
+    bool private allowUpgrade;
 
     mapping(address => uint256) public slotLimits;
 
     /**
      * @notice Initializes the contract.
-     * @param upgrader_ The address of the upgrader role.
      * @param initialAuthority_ The authority that manages this contract.
      * @param globalSlotLimit_ The initial global slot limit.
      */
     function initialize(
-        address upgrader_,
         address initialAuthority_,
         uint256 globalSlotLimit_
     ) external initializer {
-        __AccessControl_init();
         __AccessManaged_init(initialAuthority_);
         __UUPSUpgradeable_init();
 
-        _grantRole(UPGRADER_ROLE, upgrader_);
         globalSlotLimit = globalSlotLimit_;
     }
 
@@ -99,7 +95,20 @@ contract SlotManager is
         return globalSlotLimit - slotLimits[_account];
     }
 
-    function _authorizeUpgrade(
-        address newImplementation
-    ) internal override onlyRole(UPGRADER_ROLE) {}
+    function upgradeToAndCall(
+        address newImplementation,
+        bytes memory data
+    ) public payable override restricted {
+        allowUpgrade = true;
+
+        super.upgradeToAndCall(newImplementation, data);
+    }
+
+    function _authorizeUpgrade(address) internal override {
+        if (!allowUpgrade) {
+            // This path may not be reachable
+            revert UpgradeDenied();
+        }
+        allowUpgrade = false;
+    }
 }

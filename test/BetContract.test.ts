@@ -1,18 +1,17 @@
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers"
-import { Manager__factory } from "../typechain-types/factories/contracts/Manager__factory";
-import { Manager } from "../typechain-types/contracts/Manager";
 import { SlotManager__factory } from "../typechain-types/factories/contracts/SlotManager__factory";
 import { BetContract__factory } from "../typechain-types/factories/contracts/BetContract__factory";
 import { BUSDMock__factory } from "../typechain-types/factories/contracts/test/BUSDMock__factory";
 import { BUSDMock } from "../typechain-types/contracts/test/BUSDMock";
-import { ZeroAddress } from "ethers";
+import { ZeroAddress, Addressable } from "ethers";
+import { AccessManager, AccessManager__factory, BetContract, SlotManager } from "../typechain-types";
 
 async function setFunctionRole(
     admin: HardhatEthersSigner,
-    manager: any,
-    target: string,
+    manager: AccessManager,
+    target: string | Addressable,
     funcSig: string,
     role: bigint
 ) {
@@ -26,9 +25,9 @@ async function setFunctionRole(
 }
 
 describe('BetContract', () => {
-    let manager: Manager;
-    let slotManager: any;
-    let betContract: any;
+    let manager: AccessManager;
+    let slotManager: SlotManager;
+    let betContract: BetContract;
     let busdMock: BUSDMock;
     let admin: HardhatEthersSigner;
     let slotManagerRole: HardhatEthersSigner;
@@ -45,15 +44,15 @@ describe('BetContract', () => {
         const BUSDMock = (await ethers.getContractFactory('BUSDMock')) as BUSDMock__factory;
         busdMock = await BUSDMock.deploy();
 
-        const Manager = (await ethers.getContractFactory('Manager')) as Manager__factory;
+        const Manager = (await ethers.getContractFactory('AccessManager')) as AccessManager__factory;
         manager = await Manager.deploy(admin.address);
 
         const SlotManager = (await ethers.getContractFactory('SlotManager')) as SlotManager__factory;
         slotManager = await upgrades.deployProxy(
             SlotManager,
-            [upgrader.address, manager.target, globalSlotLimit],
+            [manager.target, globalSlotLimit],
             { initializer: 'initialize', kind: 'uups' }
-        );
+        ) as unknown as SlotManager;
 
         await manager.connect(admin).grantRole(SLOT_MANAGER_ROLE, slotManagerRole.address, 0);
 
@@ -65,9 +64,9 @@ describe('BetContract', () => {
         const BetContract = (await ethers.getContractFactory('BetContract')) as BetContract__factory;
         betContract = await upgrades.deployProxy(
             BetContract,
-            [upgrader.address, manager.target, nativeFeeAmount],
+            [manager.target, nativeFeeAmount],
             { initializer: 'initialize', kind: 'uups' }
-        );
+        ) as unknown as BetContract;
 
         await setFunctionRole(admin, manager, betContract.target, 'createPool(bool,string,address,uint256[])', DEFAULT_ADMIN_ROLE);
         await setFunctionRole(admin, manager, betContract.target, 'setPoolStatus(uint256,bool)', DEFAULT_ADMIN_ROLE);
@@ -81,8 +80,6 @@ describe('BetContract', () => {
             /* ASSERT */
             const [isAdmin,] = await manager.hasRole(DEFAULT_ADMIN_ROLE, admin.address);
             expect(isAdmin).to.equal(true);
-
-            expect(await betContract.hasRole(await betContract.UPGRADER_ROLE(), upgrader.address)).to.true;
 
             const nativeFee = await betContract.nativeFeeAmount();
             expect(nativeFee).to.equal(nativeFeeAmount);
@@ -191,7 +188,7 @@ describe('BetContract', () => {
 
             /* ASSERT */
             const minedTx = await tx.wait();
-            const fee: bigint = BigInt(minedTx.gasUsed * minedTx.gasPrice);
+            const fee: bigint = BigInt(minedTx!.gasUsed * minedTx!.gasPrice);
             const ownerBalanceAfter = await ethers.provider.getBalance(to);
 
             expect(ownerBalanceAfter).to.be.equal(ownerBalanceBefore + amount - fee);
@@ -512,4 +509,18 @@ describe('BetContract', () => {
             );
         });
     });
+
+    it.only("upgrade",async () => {
+        const factory = await ethers.getContractFactory("BetContract");
+        const newImplementation = await factory.deploy();
+
+        const implBefore = await upgrades.erc1967.getImplementationAddress(betContract.target as string);
+
+        await betContract.connect(admin).upgradeToAndCall(newImplementation.target, "0x");
+
+        const implAfter = await upgrades.erc1967.getImplementationAddress(betContract.target as string);
+
+        expect(implBefore).not.to.equal(implAfter);
+
+    })
 });
