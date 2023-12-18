@@ -27,14 +27,13 @@ describe('SlotManager', () => {
     let slotManager: SlotManager;
     let admin: HardhatEthersSigner;
     let slotManagerRole: HardhatEthersSigner;
-    let upgrader: HardhatEthersSigner;
     let addr1: HardhatEthersSigner;
     const globalSlotLimit = 5;
     const ADMIN_ROLE = 0n;
     const SLOT_MANAGER_ROLE = 1n;
 
     beforeEach(async () => {
-        [admin, slotManagerRole, upgrader, addr1] = await ethers.getSigners();
+        [admin, slotManagerRole, addr1] = await ethers.getSigners();
 
         const Manager = (await ethers.getContractFactory('AccessManager')) as AccessManager__factory;
         manager = await Manager.deploy(admin.address);
@@ -253,7 +252,7 @@ describe('SlotManager', () => {
 
     describe('upgradeToAndCall', async () => {
         let newImplementation: SlotManager;
-    
+
         beforeEach(async () => {
             const factory = await ethers.getContractFactory("SlotManager");
             newImplementation = await factory.deploy();

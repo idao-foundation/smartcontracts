@@ -24,6 +24,12 @@ async function setFunctionRole(
     );
 }
 
+async function getBlockTimestamp(tx: any): Promise<number> {
+    const minedTx = await tx.wait();
+    const txBlock = await ethers.provider.getBlock(minedTx.blockNumber);
+    return txBlock?.timestamp || 0;
+}
+
 describe('BetContract', () => {
     let manager: AccessManager;
     let slotManager: SlotManager;
@@ -31,15 +37,14 @@ describe('BetContract', () => {
     let busdMock: BUSDMock;
     let admin: HardhatEthersSigner;
     let slotManagerRole: HardhatEthersSigner;
-    let upgrader: HardhatEthersSigner;
     let addr1: HardhatEthersSigner;
     const globalSlotLimit = 5;
-    const nativeFeeAmount = 1;
+    const nativeFeeAmount = ethers.parseUnits('1', 18);
     const ADMIN_ROLE = 0n;
     const SLOT_MANAGER_ROLE = 1n;
 
     beforeEach(async () => {
-        [admin, slotManagerRole, upgrader, addr1] = await ethers.getSigners();
+        [admin, slotManagerRole, addr1] = await ethers.getSigners();
 
         const BUSDMock = (await ethers.getContractFactory('BUSDMock')) as BUSDMock__factory;
         busdMock = await BUSDMock.deploy();
@@ -54,17 +59,17 @@ describe('BetContract', () => {
             { initializer: 'initialize', kind: 'uups' }
         ) as unknown as SlotManager;
 
-        await manager.connect(admin).grantRole(SLOT_MANAGER_ROLE, slotManagerRole.address, 0);
-
-        await setFunctionRole(admin, manager, slotManager.target, 'redeemSlot(address)', SLOT_MANAGER_ROLE);
-        await setFunctionRole(admin, manager, slotManager.target, 'freeSlot(address)', SLOT_MANAGER_ROLE);
-
         const BetContract = (await ethers.getContractFactory('BetContract')) as BetContract__factory;
         betContract = await upgrades.deployProxy(
             BetContract,
-            [manager.target, nativeFeeAmount],
+            [manager.target, slotManager.target, nativeFeeAmount],
             { initializer: 'initialize', kind: 'uups' }
         ) as unknown as BetContract;
+
+        await manager.connect(admin).grantRole(SLOT_MANAGER_ROLE, betContract.target, 0);
+
+        await setFunctionRole(admin, manager, slotManager.target, 'redeemSlot(address)', SLOT_MANAGER_ROLE);
+        await setFunctionRole(admin, manager, slotManager.target, 'freeSlot(address)', SLOT_MANAGER_ROLE);
     });
 
     describe('Initialize', async () => {
@@ -78,11 +83,303 @@ describe('BetContract', () => {
         });
     });
 
+    describe('bet', async () => {
+        it('should place a bet correctly', async () => {
+            /* SETUP */
+            const active = true;
+            const name = 'New Pool';
+            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const durations = [1n, 2n, 3n];
+            const settlementPeriods = [10n, 20n, 30n];
+
+            await betContract.connect(admin).createPool(active, name, oracleAddress, durations, settlementPeriods);
+
+            const poolId = await betContract.poolLength() - 1n;
+            const duration = durations[0];
+
+            const amount = await betContract.nativeFeeAmount();
+
+            /* EXECUTE */
+            const tx = await betContract.connect(addr1).bet(poolId, nativeFeeAmount, duration, {
+                value: amount
+            });
+
+            /* ASSERT */
+            const betCount = await betContract.betLength();
+            const betId = betCount - 1n;
+
+            expect(betCount).to.equal(1);
+
+            const createdAt = await getBlockTimestamp(tx);
+
+            const [bidder, currentPoolId, bidPrice, resultPrice, bidStartTimestamp, bidEndTimestamp, bidSettlementTimestamp] = await betContract.betInfo(betId);
+
+            expect(addr1.address).to.be.equal(bidder);
+            expect(poolId).to.be.equal(currentPoolId);
+            expect(amount).to.be.equal(bidPrice);
+            expect(0).to.be.equal(resultPrice);
+            expect(createdAt).to.be.equal(bidStartTimestamp);
+            expect(BigInt(createdAt) + duration).to.be.equal(bidEndTimestamp);
+            expect(settlementPeriods[0]).to.be.equal(bidSettlementTimestamp);
+
+            await expect(tx).to.emit(betContract, 'BetPlaced')
+                .withArgs(betId, poolId, addr1.address, amount, nativeFeeAmount, duration, settlementPeriods[0]);
+        });
+
+        it('should revert when pool does not exist', async () => {
+            /* SETUP */
+            const poolId = await betContract.poolLength();
+            const predictionPrice = ethers.parseUnits('1', 18);
+            const duration = 1n;
+
+            /* EXECUTE */
+            const promise = betContract.bet(poolId, predictionPrice, duration);
+
+            /* ASSERT */
+            await expect(promise).to.be.revertedWithCustomError(
+                betContract, 'PoolDoesNotExist'
+            );
+        });
+
+        it('should revert when pool is inactive', async () => {
+            /* SETUP */
+            const active = false;
+            const name = 'New Pool';
+            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const durations = [1n, 2n, 3n];
+            const settlementPeriods = [10n, 20n, 30n];
+
+            await betContract.connect(admin).createPool(active, name, oracleAddress, durations, settlementPeriods);
+
+            const poolId = await betContract.poolLength() - 1n;
+            const predictionPrice = ethers.parseUnits('1', 18);
+            const duration = durations[0];
+
+            /* EXECUTE */
+            const promise = betContract.bet(poolId, predictionPrice, duration);
+
+            /* ASSERT */
+            await expect(promise).to.be.revertedWithCustomError(
+                betContract, 'PoolIsInactive'
+            );
+        });
+
+        it('should revert when insufficient funds', async () => {
+            /* SETUP */
+            const active = true;
+            const name = 'New Pool';
+            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const durations = [1n, 2n, 3n];
+            const settlementPeriods = [10n, 20n, 30n];
+
+            await betContract.connect(admin).createPool(active, name, oracleAddress, durations, settlementPeriods);
+
+            const poolId = await betContract.poolLength() - 1n;
+            const predictionPrice = ethers.parseUnits('1', 18);
+            const duration = durations[0];
+
+            const amount = await betContract.nativeFeeAmount() - 1n;
+
+            /* EXECUTE */
+            const promise = betContract.bet(poolId, predictionPrice, duration, {
+                value: amount
+            });
+
+            /* ASSERT */
+            await expect(promise).to.be.revertedWithCustomError(
+                betContract, 'InsufficientFunds'
+            );
+        });
+
+        it('should revert when duration does not exist in pool', async () => {
+            /* SETUP */
+            const active = true;
+            const name = 'New Pool';
+            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const durations = [1n, 2n, 3n];
+            const settlementPeriods = [10n, 20n, 30n];
+
+            await betContract.connect(admin).createPool(active, name, oracleAddress, durations, settlementPeriods);
+
+            const poolId = await betContract.poolLength() - 1n;
+            const predictionPrice = ethers.parseUnits('1', 18);
+            const duration = 0;
+
+            const amount = await betContract.nativeFeeAmount();
+
+            /* EXECUTE */
+            const promise = betContract.bet(poolId, predictionPrice, duration, {
+                value: amount
+            });
+
+            /* ASSERT */
+            await expect(promise).to.be.revertedWithCustomError(
+                betContract, 'DurationNotAllowed'
+            );
+        });
+    });
+
+    describe('betLength', async () => {
+        it('should return the number of bet created', async () => {
+            /* SETUP */
+            const betCountBefore = await betContract.betLength();
+            const active = true;
+            const name = 'New Pool';
+            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const durations = [1n, 2n, 3n];
+            const settlementPeriods = [10n, 20n, 30n];
+
+            await betContract.connect(admin).createPool(active, name, oracleAddress, durations, settlementPeriods);
+
+            const poolId = await betContract.poolLength() - 1n;
+            const duration = durations[0];
+
+            const amount = await betContract.nativeFeeAmount();
+
+            const tx = await betContract.connect(addr1).bet(poolId, nativeFeeAmount, duration, {
+                value: amount
+            });
+
+            /* EXECUTE */
+            const betCountAfter = await betContract.betLength();
+
+            /* ASSERT */
+            expect(betCountAfter).to.equal(betCountBefore + 1n);
+        });
+    });
+
+    describe('betInfo', async () => {
+        it('should retrieve information about a specific bet', async () => {
+            /* SETUP */
+            const active = true;
+            const name = 'New Pool';
+            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const durations = [1n, 2n, 3n];
+            const settlementPeriods = [10n, 20n, 30n];
+
+            await betContract.connect(admin).createPool(active, name, oracleAddress, durations, settlementPeriods);
+
+            const poolId = await betContract.poolLength() - 1n;
+            const duration = durations[0];
+
+            const amount = await betContract.nativeFeeAmount();
+
+            const tx = await betContract.connect(addr1).bet(poolId, nativeFeeAmount, duration, {
+                value: amount
+            });
+
+            const betCount = await betContract.betLength();
+            const betId = betCount - 1n;
+
+            /* EXECUTE */
+            const [bidder, currentPoolId, bidPrice, resultPrice, bidStartTimestamp, bidEndTimestamp, bidSettlementTimestamp] = await betContract.betInfo(betId);
+
+            /* ASSERT */
+            const createdAt = await getBlockTimestamp(tx);
+
+            expect(addr1.address).to.be.equal(bidder);
+            expect(poolId).to.be.equal(currentPoolId);
+            expect(amount).to.be.equal(bidPrice);
+            expect(0).to.be.equal(resultPrice);
+            expect(createdAt).to.be.equal(bidStartTimestamp);
+            expect(BigInt(createdAt) + duration).to.be.equal(bidEndTimestamp);
+            expect(settlementPeriods[0]).to.be.equal(bidSettlementTimestamp);
+        });
+
+        it('should revert when bet does not exist', async () => {
+            /* SETUP */
+            const betId = await betContract.betLength();
+
+            /* EXECUTE */
+            const promise = betContract.betInfo(betId);
+
+            /* ASSERT */
+            await expect(promise).to.be.revertedWithCustomError(
+                betContract, 'BetDoesNotExist'
+            );
+        });
+    });
+
+    describe('fillPrice', async () => {
+        it.skip('should fetch the price from Chainlink after the bet duration ends', async () => {
+            /* SETUP */
+            const active = true;
+            const name = 'New Pool';
+            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const durations = [1n, 4000n, 5000n];
+            const settlementPeriods = [10n, 20n, 30n];
+
+            await betContract.connect(admin).createPool(active, name, oracleAddress, durations, settlementPeriods);
+
+            const poolId = await betContract.poolLength() - 1n;
+            const duration = durations[0];
+
+            const amount = await betContract.nativeFeeAmount();
+
+            await betContract.connect(addr1).bet(poolId, nativeFeeAmount, duration, {
+                value: amount
+            });
+
+            const betCount = await betContract.betLength();
+            const betId = betCount - 1n;
+
+            /* EXECUTE */
+            // TODO: fix test
+            const tx = await betContract.fillPrice(betId);
+
+            /* ASSERT */
+        });
+
+        it('should revert when bet does not exist', async () => {
+            /* SETUP */
+            const betId = await betContract.betLength();
+
+            /* EXECUTE */
+            const promise = betContract.fillPrice(betId);
+
+            /* ASSERT */
+            await expect(promise).to.be.revertedWithCustomError(
+                betContract, 'BetDoesNotExist'
+            );
+        });
+
+        it('should revert when bet does not exist', async () => {
+            /* SETUP */
+            const active = true;
+            const name = 'New Pool';
+            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const durations = [3600n, 4000n, 5000n];
+            const settlementPeriods = [10n, 20n, 30n];
+
+            await betContract.connect(admin).createPool(active, name, oracleAddress, durations, settlementPeriods);
+
+            const poolId = await betContract.poolLength() - 1n;
+            const duration = durations[0];
+
+            const amount = await betContract.nativeFeeAmount();
+
+            const tx = await betContract.connect(addr1).bet(poolId, nativeFeeAmount, duration, {
+                value: amount
+            });
+
+            const betCount = await betContract.betLength();
+            const betId = betCount - 1n;
+
+            /* EXECUTE */
+            const promise = betContract.fillPrice(betId);
+
+            /* ASSERT */
+            await expect(promise).to.be.revertedWithCustomError(
+                betContract, 'BetNotEnded'
+            );
+        });
+    });
+
     describe('setNativeFeeAmount', async () => {
         it('should set native fee amount correctly', async () => {
             /* SETUP */
             const nativeFeeBefore = await betContract.nativeFeeAmount();
-            const newNativeFee = 20;
+            const newNativeFee = ethers.parseUnits('2', 18);
 
             /* EXECUTE */
             await betContract.connect(admin).setNativeFeeAmount(newNativeFee);
@@ -109,7 +406,7 @@ describe('BetContract', () => {
 
         it('rejects if not admin role', async () => {
             /* SETUP */
-            const newNativeFee = 20;
+            const newNativeFee = ethers.parseUnits('2', 18);
 
             /* EXECUTE */
             const promise = betContract.connect(addr1).setNativeFeeAmount(newNativeFee);
@@ -125,7 +422,7 @@ describe('BetContract', () => {
         it('should get native fee amount correctly', async () => {
             /* SETUP */
             const nativeFeeBefore = await betContract.nativeFeeAmount();
-            const newNativeFee = 10;
+            const newNativeFee = ethers.parseUnits('2', 18);
 
             await betContract.connect(admin).setNativeFeeAmount(newNativeFee);
 
@@ -207,15 +504,16 @@ describe('BetContract', () => {
             const name = 'New Pool';
             const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
             const durations = [1n, 2n, 3n];
+            const settlementPeriods = [10n, 20n, 30n];
 
             /* EXECUTE */
-            const tx = await betContract.connect(admin).createPool(active, name, oracleAddress, durations);
+            const tx = await betContract.connect(admin).createPool(active, name, oracleAddress, durations, settlementPeriods);
 
             /* ASSERT */
             const poolCount = await betContract.poolLength();
             const poolId = poolCount - 1n;
 
-            const [currentActive, currentName, currentOracleAddress, currentDurations] = await betContract.poolInfo(poolId);
+            const [currentActive, currentName, currentOracleAddress, currentDurations, currentSettlementPeriods] = await betContract.poolInfo(poolId);
 
             expect(poolCount).to.equal(1);
 
@@ -223,9 +521,10 @@ describe('BetContract', () => {
             expect(name).to.be.equal(currentName);
             expect(oracleAddress).to.be.equal(currentOracleAddress);
             expect(durations).to.deep.equal(currentDurations);
+            expect(settlementPeriods).to.deep.equal(currentSettlementPeriods);
 
             await expect(tx).to.emit(betContract, 'PoolCreated')
-                .withArgs(poolId, active, name, oracleAddress, durations);
+                .withArgs(poolId, active, name, oracleAddress, durations, settlementPeriods);
         });
 
         it('should revert when duration length is zero', async () => {
@@ -234,13 +533,30 @@ describe('BetContract', () => {
             const name = 'New Pool';
             const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
             const durations: bigint[] = [];
+            const settlementPeriods = [10n, 20n, 30n];
 
             /* EXECUTE */
-            const promise = betContract.connect(admin).createPool(active, name, oracleAddress, durations);
+            const promise = betContract.connect(admin).createPool(active, name, oracleAddress, durations, settlementPeriods);
 
             /* ASSERT */
             await expect(promise)
                 .to.be.revertedWithCustomError(betContract, "DataLengthsIsZero");
+        });
+
+        it('should revert when durations and settlementPeriods length are not the same', async () => {
+            /* SETUP */
+            const active = true;
+            const name = 'New Pool';
+            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const durations = [1n];
+            const settlementPeriods = [10n, 20n, 30n];
+
+            /* EXECUTE */
+            const promise = betContract.connect(admin).createPool(active, name, oracleAddress, durations, settlementPeriods);
+
+            /* ASSERT */
+            await expect(promise)
+                .to.be.revertedWithCustomError(betContract, "DataLengthsMismatch");
         });
 
         it('should revert when oracle address is zero', async () => {
@@ -249,9 +565,10 @@ describe('BetContract', () => {
             const name = 'New Pool';
             const oracleAddress = ZeroAddress;
             const durations = [1n, 2n, 3n];
+            const settlementPeriods = [10n, 20n, 30n];
 
             /* EXECUTE */
-            const promise = betContract.connect(admin).createPool(active, name, oracleAddress, durations);
+            const promise = betContract.connect(admin).createPool(active, name, oracleAddress, durations, settlementPeriods);
 
             /* ASSERT */
             await expect(promise)
@@ -264,9 +581,10 @@ describe('BetContract', () => {
             const name = 'New Pool';
             const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
             const durations = [1n, 2n, 3n];
+            const settlementPeriods = [10n, 20n, 30n];
 
             /* EXECUTE */
-            const promise = betContract.connect(addr1).createPool(active, name, oracleAddress, durations);
+            const promise = betContract.connect(addr1).createPool(active, name, oracleAddress, durations, settlementPeriods);
 
             /* ASSERT */
             await expect(promise).to.be.revertedWithCustomError(
@@ -283,8 +601,9 @@ describe('BetContract', () => {
             const name = 'New Pool';
             const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
             const durations = [1n, 2n, 3n];
+            const settlementPeriods = [10n, 20n, 30n];
 
-            await betContract.connect(admin).createPool(activeBefore, name, oracleAddress, durations);
+            await betContract.connect(admin).createPool(activeBefore, name, oracleAddress, durations, settlementPeriods);
         });
 
         it('should create a new pool with specified parameters', async () => {
@@ -297,7 +616,7 @@ describe('BetContract', () => {
             const tx = await betContract.connect(admin).setPoolStatus(poolId, newActive);
 
             /* ASSERT */
-            const [currentActive, , ,] = await betContract.poolInfo(poolId);
+            const [currentActive, , , ,] = await betContract.poolInfo(poolId);
 
             expect(activeBefore).not.to.be.equal(currentActive);
             expect(newActive).to.be.equal(currentActive);
@@ -341,6 +660,7 @@ describe('BetContract', () => {
         let nameBefore: string;
         let oracleAddressBefore: string;
         let durationsBefore: bigint[];
+        let settlementPeriodsBefore: bigint[];
         let poolId: bigint;
 
         beforeEach(async () => {
@@ -348,8 +668,9 @@ describe('BetContract', () => {
             nameBefore = 'New Pool';
             oracleAddressBefore = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
             durationsBefore = [1n, 2n, 3n];
+            settlementPeriodsBefore = [10n, 20n, 30n];
 
-            await betContract.connect(admin).createPool(activeBefore, nameBefore, oracleAddressBefore, durationsBefore);
+            await betContract.connect(admin).createPool(activeBefore, nameBefore, oracleAddressBefore, durationsBefore, settlementPeriodsBefore);
 
             const poolCount = await betContract.poolLength();
             poolId = poolCount - 1n;
@@ -361,12 +682,13 @@ describe('BetContract', () => {
             const name = 'Updated Pool';
             const oracleAddress = '0xCC79157eb46F5624204f47AB42b3906cAA40eaB7';
             const durations = [1n, 2n, 3n, 4n];
+            const settlementPeriods = [10n, 20n, 30n, 40n];
 
             /* EXECUTE */
-            const tx = await betContract.connect(admin).editPool(poolId, active, name, oracleAddress, durations);
+            const tx = await betContract.connect(admin).editPool(poolId, active, name, oracleAddress, durations, settlementPeriods);
 
             /* ASSERT */
-            const [currentActive, currentName, currentOracleAddress, currentDurations] = await betContract.poolInfo(poolId);
+            const [currentActive, currentName, currentOracleAddress, currentDurations, currentSettlementPeriods] = await betContract.poolInfo(poolId);
 
             expect(active).to.be.equal(currentActive);
             expect(name).to.be.equal(currentName);
@@ -377,9 +699,10 @@ describe('BetContract', () => {
             expect(nameBefore).not.to.be.equal(currentName);
             expect(oracleAddressBefore).not.to.be.equal(currentOracleAddress);
             expect(durationsBefore).not.to.deep.equal(currentDurations);
+            expect(settlementPeriodsBefore).not.to.deep.equal(currentSettlementPeriods);
 
             await expect(tx).to.emit(betContract, 'PoolUpdated')
-                .withArgs(poolId, active, name, oracleAddress, durations);
+                .withArgs(poolId, active, name, oracleAddress, durations, settlementPeriods);
         });
 
         it('should revert when duration length is zero', async () => {
@@ -388,13 +711,30 @@ describe('BetContract', () => {
             const name = 'New Pool';
             const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
             const durations: bigint[] = [];
+            const settlementPeriods = [10n, 20n, 30n];
 
             /* EXECUTE */
-            const promise = betContract.connect(admin).editPool(poolId, active, name, oracleAddress, durations);
+            const promise = betContract.connect(admin).editPool(poolId, active, name, oracleAddress, durations, settlementPeriods);
 
             /* ASSERT */
             await expect(promise)
                 .to.be.revertedWithCustomError(betContract, "DataLengthsIsZero");
+        });
+
+        it('should revert when durations and settlementPeriods length are not the same', async () => {
+            /* SETUP */
+            const active = true;
+            const name = 'New Pool';
+            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const durations = [1n];
+            const settlementPeriods = [10n, 20n, 30n];
+
+            /* EXECUTE */
+            const promise = betContract.connect(admin).editPool(poolId, active, name, oracleAddress, durations, settlementPeriods);
+
+            /* ASSERT */
+            await expect(promise)
+                .to.be.revertedWithCustomError(betContract, "DataLengthsMismatch");
         });
 
         it('should revert when oracle address is zero', async () => {
@@ -403,9 +743,10 @@ describe('BetContract', () => {
             const name = 'New Pool';
             const oracleAddress = ZeroAddress;
             const durations = [1n, 2n, 3n];
+            const settlementPeriods = [10n, 20n, 30n];
 
             /* EXECUTE */
-            const promise = betContract.connect(admin).editPool(poolId, active, name, oracleAddress, durations);
+            const promise = betContract.connect(admin).editPool(poolId, active, name, oracleAddress, durations, settlementPeriods);
 
             /* ASSERT */
             await expect(promise)
@@ -419,9 +760,10 @@ describe('BetContract', () => {
             const name = 'Updated Pool';
             const oracleAddress = '0xCC79157eb46F5624204f47AB42b3906cAA40eaB7';
             const durations = [1n, 2n, 3n, 4n];
+            const settlementPeriods = [10n, 20n, 30n, 40n];
 
             /* EXECUTE */
-            const promise = betContract.connect(admin).editPool(poolId, active, name, oracleAddress, durations);
+            const promise = betContract.connect(admin).editPool(poolId, active, name, oracleAddress, durations, settlementPeriods);
 
             /* ASSERT */
             await expect(promise).to.be.revertedWithCustomError(
@@ -435,9 +777,10 @@ describe('BetContract', () => {
             const name = 'New Pool';
             const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
             const durations = [1n, 2n, 3n];
+            const settlementPeriods = [10n, 20n, 30n];
 
             /* EXECUTE */
-            const promise = betContract.connect(addr1).editPool(poolId, active, name, oracleAddress, durations);
+            const promise = betContract.connect(addr1).editPool(poolId, active, name, oracleAddress, durations, settlementPeriods);
 
             /* ASSERT */
             await expect(promise).to.be.revertedWithCustomError(
@@ -453,9 +796,10 @@ describe('BetContract', () => {
             const name = 'New Pool';
             const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
             const durations = [1n, 2n, 3n];
+            const settlementPeriods = [10n, 20n, 30n];
             const poolCountBefore = await betContract.poolLength();
 
-            await betContract.connect(admin).createPool(active, name, oracleAddress, durations);
+            await betContract.connect(admin).createPool(active, name, oracleAddress, durations, settlementPeriods);
 
             /* EXECUTE */
             const poolCountAfter = await betContract.poolLength();
@@ -472,20 +816,22 @@ describe('BetContract', () => {
             const name = 'New Pool';
             const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
             const durations = [1n, 2n, 3n];
+            const settlementPeriods = [10n, 20n, 30n];
 
-            await betContract.connect(admin).createPool(active, name, oracleAddress, durations);
+            await betContract.connect(admin).createPool(active, name, oracleAddress, durations, settlementPeriods);
 
             const poolCount = await betContract.poolLength();
             const poolId = poolCount - 1n;
 
             /* EXECUTE */
-            const [currentActive, currentName, currentOracleAddress, currentDurations] = await betContract.poolInfo(poolId);
+            const [currentActive, currentName, currentOracleAddress, currentDurations, currentSettlementPeriods] = await betContract.poolInfo(poolId);
 
             /* ASSERT */
             expect(active).to.be.equal(currentActive);
             expect(name).to.be.equal(currentName);
             expect(oracleAddress).to.be.equal(currentOracleAddress);
             expect(durations).to.deep.equal(currentDurations);
+            expect(settlementPeriods).to.deep.equal(currentSettlementPeriods);
         });
 
         it('should revert when pool does not exist', async () => {
@@ -504,7 +850,7 @@ describe('BetContract', () => {
 
     describe('upgradeToAndCall', async () => {
         let newImplementation: BetContract;
-    
+
         beforeEach(async () => {
             const factory = await ethers.getContractFactory("BetContract");
             newImplementation = await factory.deploy();

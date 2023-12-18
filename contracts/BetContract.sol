@@ -7,6 +7,8 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "./SlotManager.sol";
+import "./gelato/AutomateTaskCreator.sol";
 
 contract BetContract is
     Initializable,
@@ -15,7 +17,6 @@ contract BetContract is
 {
     using EnumerableSet for EnumerableSet.UintSet;
     using SafeERC20 for IERC20;
-
     using Address for address payable;
 
     struct PoolInfo {
@@ -24,13 +25,35 @@ contract BetContract is
         address oracleAddress;
     }
 
+    struct BetInfo {
+        address bidder;
+        uint256 poolId;
+        uint256 bidPrice;
+        uint256 resultPrice;
+        uint256 bidStartTimestamp;
+        uint256 bidEndTimestamp;
+        uint256 bidSettleTimestamp;
+    }
+
     error DataLengthsIsZero();
+    error DataLengthsMismatch();
     error AmountIsZero();
+    error InsufficientFunds();
     error ZeroAddress();
     error PoolDoesNotExist();
+    error PoolIsInactive();
     error UpgradeDenied();
+    error DurationNotAllowed();
+    error BetDoesNotExist();
+    error BetNotEnded();
 
-    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+    // address public constant NATIVE_MATIC =
+    //     0x0000000000000000000000000000000000001010;
+
+    SlotManager public slotManager;
+    // AutomateTaskCreator public automateTaskCreator;
+
+    // address public automateAddress;
 
     uint256 private nativeFee;
 
@@ -38,14 +61,18 @@ contract BetContract is
 
     PoolInfo[] private pools;
 
+    BetInfo[] private bets;
+
     mapping(uint256 => EnumerableSet.UintSet) private poolDurations;
+    mapping(uint256 => EnumerableSet.UintSet) private poolSettlementPeriods;
 
     event PoolCreated(
         uint256 indexed poolId,
         bool active,
         string name,
         address oracleAddress,
-        uint256[] durations
+        uint256[] durations,
+        uint256[] settlementPeriods
     );
 
     event PoolStatusUpdated(uint256 indexed poolId, bool active);
@@ -55,7 +82,18 @@ contract BetContract is
         bool active,
         string name,
         address oracleAddress,
-        uint256[] durations
+        uint256[] durations,
+        uint256[] settlementPeriods
+    );
+
+    event BetPlaced(
+        uint256 indexed betId,
+        uint256 indexed poolId,
+        address indexed bidder,
+        uint256 bidPrice,
+        uint256 predictionPrice,
+        uint256 duration,
+        uint256 settlementPeriod
     );
 
     /**
@@ -65,12 +103,17 @@ contract BetContract is
      */
     function initialize(
         address initialAuthority_,
+        SlotManager slotManager_,
+        // address automateAddress_,
         uint256 nativeFee_
     ) external initializer {
         __AccessManaged_init(initialAuthority_);
         __UUPSUpgradeable_init();
+        //AutomateTaskCreator(automateAddress_, address(this));
 
+        slotManager = slotManager_;
         nativeFee = nativeFee_;
+        // automateAddress = automateAddress_;
     }
 
     /**
@@ -78,15 +121,112 @@ contract BetContract is
      */
     receive() external payable {}
 
-    //TODO: implement
+    /**
+     * @notice Creates a new bet with specified parameters.
+     * @param _poolId The ID of the pool.
+     * @param _predictionPrice The prediction price of the bet.
+     * @param _duration The duration of the bet.
+     */
     function bet(
         uint256 _poolId,
         uint256 _predictionPrice,
         uint256 _duration
-    ) external payable {}
+    ) external payable {
+        if (_poolId >= pools.length) {
+            revert PoolDoesNotExist();
+        }
+        if (!pools[_poolId].active) {
+            revert PoolIsInactive();
+        }
+        if (msg.value != nativeFee) {
+            revert InsufficientFunds();
+        }
+        if (!poolDurations[_poolId].contains(_duration)) {
+            revert DurationNotAllowed();
+        }
 
-    //TODO: implement
-    function fillPrice(uint256 _betId) external {}
+        slotManager.redeemSlot(msg.sender);
+
+        uint256 betId = bets.length;
+        uint256 settlementPeriod;
+
+        for (uint256 i = 0; i < poolDurations[_poolId].length(); i++) {
+            if (poolDurations[_poolId].at(i) == _duration) {
+                settlementPeriod = poolSettlementPeriods[_poolId].at(i);
+            }
+        }
+
+        bets.push(
+            BetInfo({
+                bidder: msg.sender,
+                poolId: _poolId,
+                bidPrice: _predictionPrice,
+                resultPrice: 0,
+                bidStartTimestamp: block.timestamp,
+                bidEndTimestamp: block.timestamp + _duration,
+                bidSettleTimestamp: settlementPeriod
+            })
+        );
+
+        emit BetPlaced(
+            betId,
+            _poolId,
+            msg.sender,
+            msg.value,
+            _predictionPrice,
+            _duration,
+            settlementPeriod
+        );
+
+        //TODO: implement gelato - creating task for getting price
+        // ModuleData memory moduleData = ModuleData({
+        //     modules: new Module[](1),
+        //     args: new bytes[](1)
+        // });
+
+        // moduleData.modules[0] = Module.SINGLE_EXEC;
+        // moduleData.args[0] = _singleExecModuleArg();
+
+        // _createTask(
+        //     address(this),
+        //     abi.encode(this.fillPrice.selector),
+        //     moduleData,
+        //     NATIVE_MATIC
+        // );
+    }
+
+    /**
+     * @notice Fetches the price from Chainlink after the bit duration ends, updates the bid information.
+     * @param _betId The ID of the bet.
+     */
+    function fillPrice(uint256 _betId) external restricted {
+        if (_betId >= bets.length) {
+            revert BetDoesNotExist();
+        }
+
+        if (bets[_betId].bidEndTimestamp > block.timestamp) {
+            revert BetNotEnded();
+        }
+
+        address oracleAddress = pools[bets[_betId].poolId].oracleAddress;
+
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(oracleAddress);
+
+        (, int price, , , ) = priceFeed.latestRoundData();
+
+        bets[_betId].resultPrice = uint256(price);
+
+        // TODO: implement gelato - paying fee
+        // uint256 fee = 0;
+        // address feeToken;
+        // (fee, feeToken) = _getFeeDetails();
+        // _transfer(fee, feeToken);
+
+        // Address.sendValue(
+        //     payable(request.submitter),
+        //     request.gasPaymentAmount - fee
+        // );
+    }
 
     /**
      * @notice Creates a new pool with specified parameters.
@@ -99,16 +239,22 @@ contract BetContract is
         bool _active,
         string memory _name,
         address _oracleAddress,
-        uint256[] memory _durations
+        uint256[] memory _durations,
+        uint256[] memory _settlementPeriods
     ) external restricted {
         uint256 durationsCount = _durations.length;
 
         if (durationsCount == 0) {
             revert DataLengthsIsZero();
         }
+        if (durationsCount != _settlementPeriods.length) {
+            revert DataLengthsMismatch();
+        }
         if (_oracleAddress == address(0)) {
             revert ZeroAddress();
         }
+        uint256 poolId = pools.length;
+
         pools.push(
             PoolInfo({
                 active: _active,
@@ -117,13 +263,19 @@ contract BetContract is
             })
         );
 
-        uint256 poolId = pools.length - 1;
-
         for (uint256 i = 0; i < durationsCount; i++) {
             poolDurations[poolId].add(_durations[i]);
+            poolSettlementPeriods[poolId].add(_settlementPeriods[i]);
         }
 
-        emit PoolCreated(poolId, _active, _name, _oracleAddress, _durations);
+        emit PoolCreated(
+            poolId,
+            _active,
+            _name,
+            _oracleAddress,
+            _durations,
+            _settlementPeriods
+        );
     }
 
     /**
@@ -153,7 +305,8 @@ contract BetContract is
         bool _active,
         string memory _name,
         address _oracleAddress,
-        uint256[] memory _durations
+        uint256[] memory _durations,
+        uint256[] memory _settlementPeriods
     ) external restricted {
         if (_poolId >= pools.length) {
             revert PoolDoesNotExist();
@@ -162,6 +315,9 @@ contract BetContract is
 
         if (durationsCount == 0) {
             revert DataLengthsIsZero();
+        }
+        if (durationsCount != _settlementPeriods.length) {
+            revert DataLengthsMismatch();
         }
         if (_oracleAddress == address(0)) {
             revert ZeroAddress();
@@ -172,9 +328,17 @@ contract BetContract is
 
         for (uint256 i = 0; i < durationsCount; i++) {
             poolDurations[_poolId].add(_durations[i]);
+            poolSettlementPeriods[_poolId].add(_settlementPeriods[i]);
         }
 
-        emit PoolUpdated(_poolId, _active, _name, _oracleAddress, _durations);
+        emit PoolUpdated(
+            _poolId,
+            _active,
+            _name,
+            _oracleAddress,
+            _durations,
+            _settlementPeriods
+        );
     }
 
     /**
@@ -215,6 +379,14 @@ contract BetContract is
     }
 
     /**
+     * @notice Retrieves the number of bets placed.
+     * @return The total count of bets placed.
+     */
+    function betLength() external view returns (uint256) {
+        return bets.length;
+    }
+
+    /**
      * @notice Retrieves the native fee required for placing a bet.
      * @return The amount of native fee.
      */
@@ -239,7 +411,8 @@ contract BetContract is
             bool active,
             string memory name,
             address oracleAddress,
-            uint256[] memory durations
+            uint256[] memory durations,
+            uint256[] memory settlementPeriods
         )
     {
         if (_poolId >= pools.length) {
@@ -252,11 +425,22 @@ contract BetContract is
             pool.active,
             pool.name,
             pool.oracleAddress,
-            poolDurations[_poolId].values()
+            poolDurations[_poolId].values(),
+            poolSettlementPeriods[_poolId].values()
         );
     }
 
-    //TODO: implement
+    /**
+     * @notice Retrieves information about a specific bet.
+     * @param _betId The ID of the bet.
+     * @return bidder The address of the bidder.
+     * @return poolId The ID of the pool.
+     * @return bidPrice The bid price of the bet.
+     * @return resultPrice The result price of the bet.
+     * @return bidStartTimestamp The timestamp when the bet started.
+     * @return bidEndTimestamp The timestamp when the bet ended.
+     * @return bidSettleTimestamp The timestamp when the bet will be settled.
+     */
     function betInfo(
         uint256 _betId
     )
@@ -268,9 +452,26 @@ contract BetContract is
             uint256 bidPrice,
             uint256 resultPrice,
             uint256 bidStartTimestamp,
-            uint256 bidEndTimestamp
+            uint256 bidEndTimestamp,
+            uint256 bidSettleTimestamp
         )
-    {}
+    {
+        if (_betId >= bets.length) {
+            revert BetDoesNotExist();
+        }
+
+        BetInfo memory userBet = bets[_betId];
+
+        return (
+            userBet.bidder,
+            userBet.poolId,
+            userBet.bidPrice,
+            userBet.resultPrice,
+            userBet.bidStartTimestamp,
+            userBet.bidEndTimestamp,
+            userBet.bidSettleTimestamp
+        );
+    }
 
     function upgradeToAndCall(
         address newImplementation,

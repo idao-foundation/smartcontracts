@@ -17,7 +17,6 @@ contract SlotManager is
     error NoSlotsToFree();
     error UpgradeDenied();
 
-
     uint256 public globalSlotLimit;
 
     bool private allowUpgrade;
@@ -37,28 +36,6 @@ contract SlotManager is
         __UUPSUpgradeable_init();
 
         globalSlotLimit = globalSlotLimit_;
-    }
-
-    /**
-     * @notice Redeems one slot for the specified address.
-     * @param _account The address to redeem a slot for.
-     */
-    function redeemSlot(address _account) external restricted {
-        if (slotLimits[_account] >= globalSlotLimit) {
-            revert SlotLimitReached();
-        }
-        slotLimits[_account]++;
-    }
-
-    /**
-     * @notice Frees up one slot for the specified address.
-     * @param _account The address to free up a slot for.
-     */
-    function freeSlot(address _account) external restricted {
-        if (slotLimits[_account] == 0) {
-            revert NoSlotsToFree();
-        }
-        slotLimits[_account]--;
     }
 
     /**
@@ -93,6 +70,28 @@ contract SlotManager is
         }
         // Returns the available slots below the limit.
         return globalSlotLimit - slotLimits[_account];
+    }
+
+    /**
+     * @notice Redeems one slot for the specified address.
+     * @param _account The address to redeem a slot for.
+     */
+    function redeemSlot(address _account) public restricted {
+        if (slotLimits[_account] >= globalSlotLimit) {
+            revert SlotLimitReached();
+        }
+        slotLimits[_account]++;
+    }
+
+    /**
+     * @notice Frees up one slot for the specified address.
+     * @param _account The address to free up a slot for.
+     */
+    function freeSlot(address _account) public restricted {
+        if (slotLimits[_account] == 0) {
+            revert NoSlotsToFree();
+        }
+        slotLimits[_account]--;
     }
 
     function upgradeToAndCall(

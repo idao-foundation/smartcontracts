@@ -18,6 +18,11 @@ const config: HardhatUserConfig = {
     },
   },
   networks: {
+    // hardhat: {
+    //   forking: {
+    //     url: process.env.POLYGON_TESTNET_RPC_URL || defaultRpc,
+    //   }
+    // },
     polygon: {
       url: process.env.POLYGON_MAINNET_RPC_URL || defaultRpc,
       accounts: [process.env.DEPLOYER_PRIVATE_KEY || defaultPk],
