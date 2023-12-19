@@ -8,6 +8,8 @@ import { BUSDMock } from "../typechain-types/contracts/test/BUSDMock";
 import { ZeroAddress, Addressable } from "ethers";
 import { AccessManager, AccessManager__factory, BetContract, SlotManager } from "../typechain-types";
 
+import { reset } from "@nomicfoundation/hardhat-toolbox/network-helpers"
+
 async function setFunctionRole(
     admin: HardhatEthersSigner,
     manager: AccessManager,
@@ -43,6 +45,10 @@ describe('BetContract', () => {
     const ADMIN_ROLE = 0n;
     const SLOT_MANAGER_ROLE = 1n;
 
+    before(async () => {
+        await reset();
+    });
+
     beforeEach(async () => {
         [admin, slotManagerRole, addr1] = await ethers.getSigners();
 
@@ -62,7 +68,7 @@ describe('BetContract', () => {
         const BetContract = (await ethers.getContractFactory('BetContract')) as BetContract__factory;
         betContract = await upgrades.deployProxy(
             BetContract,
-            [manager.target, slotManager.target, nativeFeeAmount],
+            [manager.target, slotManager.target, ethers.ZeroAddress, nativeFeeAmount],
             { initializer: 'initialize', kind: 'uups' }
         ) as unknown as BetContract;
 
@@ -301,7 +307,7 @@ describe('BetContract', () => {
     });
 
     describe('fillPrice', async () => {
-        it.skip('should fetch the price from Chainlink after the bet duration ends', async () => {
+        it('should fetch the price from Chainlink after the bet duration ends', async () => {
             /* SETUP */
             const active = true;
             const name = 'New Pool';

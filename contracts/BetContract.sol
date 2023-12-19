@@ -4,11 +4,11 @@ pragma solidity 0.8.23;
 import "@openzeppelin/contracts-upgradeable/access/manager/AccessManagedUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./SlotManager.sol";
-import "./gelato/AutomateTaskCreator.sol";
+import "./gelato/Types.sol";
+import "./interfaces/IDataSource.sol";
 
 contract BetContract is
     Initializable,
@@ -18,6 +18,9 @@ contract BetContract is
     using EnumerableSet for EnumerableSet.UintSet;
     using SafeERC20 for IERC20;
     using Address for address payable;
+
+    address public constant NATIVE_ETH =
+        0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
     struct PoolInfo {
         bool active;
@@ -47,24 +50,24 @@ contract BetContract is
     error BetDoesNotExist();
     error BetNotEnded();
 
-    // address public constant NATIVE_MATIC =
-    //     0x0000000000000000000000000000000000001010;
-
-    SlotManager public slotManager;
-    // AutomateTaskCreator public automateTaskCreator;
-
-    // address public automateAddress;
-
-    uint256 private nativeFee;
-
-    bool private allowUpgrade;
+    mapping(uint256 => EnumerableSet.UintSet) private poolDurations;
+    mapping(uint256 => EnumerableSet.UintSet) private poolSettlementPeriods;
 
     PoolInfo[] private pools;
 
     BetInfo[] private bets;
 
-    mapping(uint256 => EnumerableSet.UintSet) private poolDurations;
-    mapping(uint256 => EnumerableSet.UintSet) private poolSettlementPeriods;
+    uint256 private nativeFee;
+
+    SlotManager public slotManager;
+
+    IAutomate public gelatoAutomate;
+
+    address public gelatoDedicatedMsgSender;
+
+    address payable public gelatoFeeCollector;
+
+    bool private allowUpgrade;
 
     event PoolCreated(
         uint256 indexed poolId,
@@ -99,21 +102,31 @@ contract BetContract is
     /**
      * @notice Initializes the contract.
      * @param initialAuthority_ The authority that manages this contract.
+     * @param slotManager_ The address of the SlotManager contract.
+     * @param automateAddress_ The address of the Gelato Automate contract.
      * @param nativeFee_ The native fee that takes when a user places a bet.
      */
     function initialize(
         address initialAuthority_,
         SlotManager slotManager_,
-        // address automateAddress_,
+        address automateAddress_,
         uint256 nativeFee_
     ) external initializer {
         __AccessManaged_init(initialAuthority_);
         __UUPSUpgradeable_init();
-        //AutomateTaskCreator(automateAddress_, address(this));
 
         slotManager = slotManager_;
         nativeFee = nativeFee_;
-        // automateAddress = automateAddress_;
+        gelatoAutomate = IAutomate(automateAddress_);
+
+        if (automateAddress_ != address(0)) {
+            (gelatoDedicatedMsgSender, ) = IOpsProxyFactory(
+                0xC815dB16D4be6ddf2685C201937905aBf338F5D7
+            ).getProxyOf(address(this));
+
+            IGelato gelato = IGelato(IAutomate(gelatoAutomate).gelato());
+            gelatoFeeCollector = payable(gelato.feeCollector());
+        }
     }
 
     /**
@@ -168,6 +181,15 @@ contract BetContract is
             })
         );
 
+        if (address(gelatoAutomate) != address(0)) {
+            bytes memory data = abi.encodeWithSelector(
+                this.fillPrice.selector,
+                betId
+            );
+
+            _createGelatoTask(data);
+        }
+
         emit BetPlaced(
             betId,
             _poolId,
@@ -178,21 +200,7 @@ contract BetContract is
             settlementPeriod
         );
 
-        //TODO: implement gelato - creating task for getting price
-        // ModuleData memory moduleData = ModuleData({
-        //     modules: new Module[](1),
-        //     args: new bytes[](1)
-        // });
-
-        // moduleData.modules[0] = Module.SINGLE_EXEC;
-        // moduleData.args[0] = _singleExecModuleArg();
-
-        // _createTask(
-        //     address(this),
-        //     abi.encode(this.fillPrice.selector),
-        //     moduleData,
-        //     NATIVE_MATIC
-        // );
+        
     }
 
     /**
@@ -216,16 +224,7 @@ contract BetContract is
 
         bets[_betId].resultPrice = uint256(price);
 
-        // TODO: implement gelato - paying fee
-        // uint256 fee = 0;
-        // address feeToken;
-        // (fee, feeToken) = _getFeeDetails();
-        // _transfer(fee, feeToken);
-
-        // Address.sendValue(
-        //     payable(request.submitter),
-        //     request.gasPaymentAmount - fee
-        // );
+        _repayGelatoExecution();
     }
 
     /**
@@ -488,5 +487,36 @@ contract BetContract is
             revert UpgradeDenied();
         }
         allowUpgrade = false;
+    }
+
+    function _createGelatoTask(bytes memory data) private returns (bytes32) {
+        ModuleData memory moduleData = ModuleData({
+            modules: new Module[](1),
+            args: new bytes[](1)
+        });
+
+        moduleData.modules[0] = Module.SINGLE_EXEC;
+        moduleData.args[0] = bytes("");
+
+        return
+            gelatoAutomate.createTask(
+                address(this),
+                data,
+                moduleData,
+                NATIVE_ETH
+            );
+    }
+
+    function _repayGelatoExecution() private {
+        if (_isDedicatedMsgSenderOrAutomate()) {
+            (uint256 fee, ) = gelatoAutomate.getFeeDetails();
+            gelatoFeeCollector.sendValue(fee);
+        }
+    }
+
+    function _isDedicatedMsgSenderOrAutomate() private view returns (bool) {
+        return
+            msg.sender == address(gelatoAutomate) ||
+            msg.sender == gelatoDedicatedMsgSender;
     }
 }
