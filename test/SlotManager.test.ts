@@ -2,8 +2,12 @@ import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers"
 import { Manager } from "../typechain-types/contracts/Manager";
-import { SlotManager__factory } from "../typechain-types/factories/contracts/SlotManager__factory";
-import { AccessManager, AccessManager__factory, SlotManager } from "../typechain-types";
+import { 
+    AccessManager, 
+    AccessManager__factory, 
+    SlotManager,
+    SlotManager__factory
+} from "../typechain-types";
 import { Addressable } from "ethers";
 
 async function setFunctionRole(
@@ -97,15 +101,15 @@ describe('SlotManager', () => {
 
         it('rejects if not slot manager role', async () => {
             /* SETUP */
-            const account = Math.floor(Math.random() * 2) === 1 ? addr1.address : admin.address;
+            const account = Math.floor(Math.random() * 2) === 1 ? addr1 : admin;
 
             /* EXECUTE */
-            const promise = slotManager.connect(addr1).redeemSlot(account);
+            const promise = slotManager.connect(account).redeemSlot(account.address);
 
             /* ASSERT */
             await expect(promise).to.be.revertedWithCustomError(
                 slotManager, 'AccessManagedUnauthorized'
-            ).withArgs(addr1.address);
+            ).withArgs(account.address);
         });
     });
 
@@ -141,15 +145,15 @@ describe('SlotManager', () => {
 
         it('rejects if not slot manager role', async () => {
             /* SETUP */
-            const account = Math.floor(Math.random() * 2) === 1 ? addr1.address : admin.address;
+            const account = Math.floor(Math.random() * 2) === 1 ? addr1 : admin;
 
             /* EXECUTE */
-            const promise = slotManager.connect(addr1).freeSlot(account);
+            const promise = slotManager.connect(account).freeSlot(account.address);
 
             /* ASSERT */
             await expect(promise).to.be.revertedWithCustomError(
                 slotManager, 'AccessManagedUnauthorized'
-            ).withArgs(addr1.address);
+            ).withArgs(account.address);
         });
     });
 

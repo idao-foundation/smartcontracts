@@ -1,12 +1,19 @@
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers"
-import { SlotManager__factory } from "../typechain-types/factories/contracts/SlotManager__factory";
-import { BetContract__factory } from "../typechain-types/factories/contracts/BetContract__factory";
-import { BUSDMock__factory } from "../typechain-types/factories/contracts/test/BUSDMock__factory";
-import { BUSDMock } from "../typechain-types/contracts/test/BUSDMock";
 import { ZeroAddress, Addressable } from "ethers";
-import { AccessManager, AccessManager__factory, BetContract, SlotManager } from "../typechain-types";
+import { 
+    AccessManager, 
+    AccessManager__factory, 
+    BetContract, 
+    BetContract__factory, 
+    SlotManager, 
+    SlotManager__factory, 
+    MockSource, 
+    MockSource__factory, 
+    BUSDMock, 
+    BUSDMock__factory 
+} from "../typechain-types";
 
 import { reset } from "@nomicfoundation/hardhat-toolbox/network-helpers"
 
@@ -37,23 +44,32 @@ describe('BetContract', () => {
     let slotManager: SlotManager;
     let betContract: BetContract;
     let busdMock: BUSDMock;
+    let mockSourse: MockSource;
     let admin: HardhatEthersSigner;
-    let slotManagerRole: HardhatEthersSigner;
+    let gelato: HardhatEthersSigner;
     let addr1: HardhatEthersSigner;
     const globalSlotLimit = 5;
     const nativeFeeAmount = ethers.parseUnits('1', 18);
     const ADMIN_ROLE = 0n;
     const SLOT_MANAGER_ROLE = 1n;
+    const GELATO_ROLE = 2n;
+    const ORACLE_PRICE = ethers.parseUnits('1', 18);
+    const ORACLE_DECIMALS = 18n;
 
     before(async () => {
         await reset();
     });
 
     beforeEach(async () => {
-        [admin, slotManagerRole, addr1] = await ethers.getSigners();
+        [admin, gelato, addr1] = await ethers.getSigners();
 
         const BUSDMock = (await ethers.getContractFactory('BUSDMock')) as BUSDMock__factory;
         busdMock = await BUSDMock.deploy();
+
+        const MockSource = (await ethers.getContractFactory('MockSource')) as MockSource__factory;
+        mockSourse = await MockSource.deploy();
+
+        await mockSourse.setPrice(ORACLE_PRICE, ORACLE_DECIMALS);
 
         const Manager = (await ethers.getContractFactory('AccessManager')) as AccessManager__factory;
         manager = await Manager.deploy(admin.address);
@@ -73,9 +89,11 @@ describe('BetContract', () => {
         ) as unknown as BetContract;
 
         await manager.connect(admin).grantRole(SLOT_MANAGER_ROLE, betContract.target, 0);
+        await manager.connect(admin).grantRole(GELATO_ROLE, gelato.address, 0);
 
         await setFunctionRole(admin, manager, slotManager.target, 'redeemSlot(address)', SLOT_MANAGER_ROLE);
         await setFunctionRole(admin, manager, slotManager.target, 'freeSlot(address)', SLOT_MANAGER_ROLE);
+        await setFunctionRole(admin, manager, betContract.target, 'fillPrice(uint256)', GELATO_ROLE);
     });
 
     describe('Initialize', async () => {
@@ -94,7 +112,7 @@ describe('BetContract', () => {
             /* SETUP */
             const active = true;
             const name = 'New Pool';
-            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const oracleAddress = mockSourse.target;
             const durations = [1n, 2n, 3n];
             const settlementPeriods = [10n, 20n, 30n];
 
@@ -151,7 +169,7 @@ describe('BetContract', () => {
             /* SETUP */
             const active = false;
             const name = 'New Pool';
-            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const oracleAddress = mockSourse.target;
             const durations = [1n, 2n, 3n];
             const settlementPeriods = [10n, 20n, 30n];
 
@@ -174,7 +192,7 @@ describe('BetContract', () => {
             /* SETUP */
             const active = true;
             const name = 'New Pool';
-            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const oracleAddress = mockSourse.target;
             const durations = [1n, 2n, 3n];
             const settlementPeriods = [10n, 20n, 30n];
 
@@ -201,7 +219,7 @@ describe('BetContract', () => {
             /* SETUP */
             const active = true;
             const name = 'New Pool';
-            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const oracleAddress = mockSourse.target;
             const durations = [1n, 2n, 3n];
             const settlementPeriods = [10n, 20n, 30n];
 
@@ -231,7 +249,7 @@ describe('BetContract', () => {
             const betCountBefore = await betContract.betLength();
             const active = true;
             const name = 'New Pool';
-            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const oracleAddress = mockSourse.target;
             const durations = [1n, 2n, 3n];
             const settlementPeriods = [10n, 20n, 30n];
 
@@ -259,7 +277,7 @@ describe('BetContract', () => {
             /* SETUP */
             const active = true;
             const name = 'New Pool';
-            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const oracleAddress = mockSourse.target;
             const durations = [1n, 2n, 3n];
             const settlementPeriods = [10n, 20n, 30n];
 
@@ -311,7 +329,7 @@ describe('BetContract', () => {
             /* SETUP */
             const active = true;
             const name = 'New Pool';
-            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const oracleAddress = mockSourse.target;
             const durations = [1n, 4000n, 5000n];
             const settlementPeriods = [10n, 20n, 30n];
 
@@ -330,10 +348,11 @@ describe('BetContract', () => {
             const betId = betCount - 1n;
 
             /* EXECUTE */
-            // TODO: fix test
-            const tx = await betContract.fillPrice(betId);
+            await betContract.connect(gelato).fillPrice(betId);
 
             /* ASSERT */
+            const [, , , resultPrice, , ,] = await betContract.betInfo(betId);
+            expect(resultPrice).to.be.equal(ORACLE_PRICE);
         });
 
         it('should revert when bet does not exist', async () => {
@@ -341,7 +360,7 @@ describe('BetContract', () => {
             const betId = await betContract.betLength();
 
             /* EXECUTE */
-            const promise = betContract.fillPrice(betId);
+            const promise = betContract.connect(gelato).fillPrice(betId);
 
             /* ASSERT */
             await expect(promise).to.be.revertedWithCustomError(
@@ -353,7 +372,7 @@ describe('BetContract', () => {
             /* SETUP */
             const active = true;
             const name = 'New Pool';
-            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const oracleAddress = mockSourse.target;
             const durations = [3600n, 4000n, 5000n];
             const settlementPeriods = [10n, 20n, 30n];
 
@@ -372,12 +391,44 @@ describe('BetContract', () => {
             const betId = betCount - 1n;
 
             /* EXECUTE */
-            const promise = betContract.fillPrice(betId);
+            const promise = betContract.connect(gelato).fillPrice(betId);
 
             /* ASSERT */
             await expect(promise).to.be.revertedWithCustomError(
                 betContract, 'BetNotEnded'
             );
+        });
+
+        it('rejects if not gelato role', async () => {
+            /* SETUP */
+            const account = Math.floor(Math.random() * 2) === 1 ? addr1 : admin;
+            const active = true;
+            const name = 'New Pool';
+            const oracleAddress = mockSourse.target;
+            const durations = [1n, 4000n, 5000n];
+            const settlementPeriods = [10n, 20n, 30n];
+
+            await betContract.connect(admin).createPool(active, name, oracleAddress, durations, settlementPeriods);
+
+            const poolId = await betContract.poolLength() - 1n;
+            const duration = durations[0];
+
+            const amount = await betContract.nativeFeeAmount();
+
+            await betContract.connect(addr1).bet(poolId, nativeFeeAmount, duration, {
+                value: amount
+            });
+
+            const betCount = await betContract.betLength();
+            const betId = betCount - 1n;
+
+            /* EXECUTE */
+            const promise = betContract.connect(addr1).fillPrice(betId);
+
+            /* ASSERT */
+            await expect(promise).to.be.revertedWithCustomError(
+                betContract, 'AccessManagedUnauthorized'
+            ).withArgs(account.address);
         });
     });
 
@@ -508,7 +559,7 @@ describe('BetContract', () => {
             /* SETUP */
             const active = true;
             const name = 'New Pool';
-            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const oracleAddress = mockSourse.target;
             const durations = [1n, 2n, 3n];
             const settlementPeriods = [10n, 20n, 30n];
 
@@ -537,7 +588,7 @@ describe('BetContract', () => {
             /* SETUP */
             const active = true;
             const name = 'New Pool';
-            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const oracleAddress = mockSourse.target;
             const durations: bigint[] = [];
             const settlementPeriods = [10n, 20n, 30n];
 
@@ -553,7 +604,7 @@ describe('BetContract', () => {
             /* SETUP */
             const active = true;
             const name = 'New Pool';
-            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const oracleAddress = mockSourse.target;
             const durations = [1n];
             const settlementPeriods = [10n, 20n, 30n];
 
@@ -585,7 +636,7 @@ describe('BetContract', () => {
             /* SETUP */
             const active = true;
             const name = 'New Pool';
-            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const oracleAddress = mockSourse.target;
             const durations = [1n, 2n, 3n];
             const settlementPeriods = [10n, 20n, 30n];
 
@@ -605,7 +656,7 @@ describe('BetContract', () => {
         beforeEach(async () => {
             activeBefore = true;
             const name = 'New Pool';
-            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const oracleAddress = mockSourse.target;
             const durations = [1n, 2n, 3n];
             const settlementPeriods = [10n, 20n, 30n];
 
@@ -664,7 +715,7 @@ describe('BetContract', () => {
     describe('editPool', async () => {
         let activeBefore: boolean;
         let nameBefore: string;
-        let oracleAddressBefore: string;
+        let oracleAddressBefore: string | Addressable;
         let durationsBefore: bigint[];
         let settlementPeriodsBefore: bigint[];
         let poolId: bigint;
@@ -672,7 +723,7 @@ describe('BetContract', () => {
         beforeEach(async () => {
             activeBefore = true;
             nameBefore = 'New Pool';
-            oracleAddressBefore = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            oracleAddressBefore = mockSourse.target;
             durationsBefore = [1n, 2n, 3n];
             settlementPeriodsBefore = [10n, 20n, 30n];
 
@@ -715,7 +766,7 @@ describe('BetContract', () => {
             /* SETUP */
             const active = true;
             const name = 'New Pool';
-            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const oracleAddress = mockSourse.target;
             const durations: bigint[] = [];
             const settlementPeriods = [10n, 20n, 30n];
 
@@ -731,7 +782,7 @@ describe('BetContract', () => {
             /* SETUP */
             const active = true;
             const name = 'New Pool';
-            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const oracleAddress = mockSourse.target;
             const durations = [1n];
             const settlementPeriods = [10n, 20n, 30n];
 
@@ -781,7 +832,7 @@ describe('BetContract', () => {
             /* SETUP */
             const active = true;
             const name = 'New Pool';
-            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const oracleAddress = mockSourse.target;
             const durations = [1n, 2n, 3n];
             const settlementPeriods = [10n, 20n, 30n];
 
@@ -800,7 +851,7 @@ describe('BetContract', () => {
             /* SETUP */
             const active = true;
             const name = 'New Pool';
-            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const oracleAddress = mockSourse.target;
             const durations = [1n, 2n, 3n];
             const settlementPeriods = [10n, 20n, 30n];
             const poolCountBefore = await betContract.poolLength();
@@ -820,7 +871,7 @@ describe('BetContract', () => {
             /* SETUP */
             const active = true;
             const name = 'New Pool';
-            const oracleAddress = '0x40193c8518BB267228Fc409a613bDbD8eC5a97b3';
+            const oracleAddress = mockSourse.target;
             const durations = [1n, 2n, 3n];
             const settlementPeriods = [10n, 20n, 30n];
 

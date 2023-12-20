@@ -198,9 +198,7 @@ contract BetContract is
             _predictionPrice,
             _duration,
             settlementPeriod
-        );
-
-        
+        ); 
     }
 
     /**
@@ -218,11 +216,11 @@ contract BetContract is
 
         address oracleAddress = pools[bets[_betId].poolId].oracleAddress;
 
-        AggregatorV3Interface priceFeed = AggregatorV3Interface(oracleAddress);
+        IDataSource priceFeed = IDataSource(oracleAddress);
 
-        (, int price, , , ) = priceFeed.latestRoundData();
+        (uint256 price, ) = priceFeed.getLatestPrice();
 
-        bets[_betId].resultPrice = uint256(price);
+        bets[_betId].resultPrice = price;
 
         _repayGelatoExecution();
     }
