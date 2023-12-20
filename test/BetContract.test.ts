@@ -46,7 +46,6 @@ describe('BetContract', () => {
     let busdMock: BUSDMock;
     let mockSourse: MockSource;
     let admin: HardhatEthersSigner;
-    let gelato: HardhatEthersSigner;
     let addr1: HardhatEthersSigner;
     const globalSlotLimit = 5;
     const nativeFeeAmount = ethers.parseUnits('1', 18);
@@ -61,7 +60,7 @@ describe('BetContract', () => {
     });
 
     beforeEach(async () => {
-        [admin, gelato, addr1] = await ethers.getSigners();
+        [admin, addr1] = await ethers.getSigners();
 
         const BUSDMock = (await ethers.getContractFactory('BUSDMock')) as BUSDMock__factory;
         busdMock = await BUSDMock.deploy();
@@ -89,11 +88,9 @@ describe('BetContract', () => {
         ) as unknown as BetContract;
 
         await manager.connect(admin).grantRole(SLOT_MANAGER_ROLE, betContract.target, 0);
-        await manager.connect(admin).grantRole(GELATO_ROLE, gelato.address, 0);
 
         await setFunctionRole(admin, manager, slotManager.target, 'redeemSlot(address)', SLOT_MANAGER_ROLE);
         await setFunctionRole(admin, manager, slotManager.target, 'freeSlot(address)', SLOT_MANAGER_ROLE);
-        await setFunctionRole(admin, manager, betContract.target, 'fillPrice(uint256)', GELATO_ROLE);
     });
 
     describe('Initialize', async () => {
@@ -348,7 +345,7 @@ describe('BetContract', () => {
             const betId = betCount - 1n;
 
             /* EXECUTE */
-            await betContract.connect(gelato).fillPrice(betId);
+            await betContract.fillPrice(betId);
 
             /* ASSERT */
             const [, , , resultPrice, , ,] = await betContract.betInfo(betId);
@@ -360,7 +357,7 @@ describe('BetContract', () => {
             const betId = await betContract.betLength();
 
             /* EXECUTE */
-            const promise = betContract.connect(gelato).fillPrice(betId);
+            const promise = betContract.fillPrice(betId);
 
             /* ASSERT */
             await expect(promise).to.be.revertedWithCustomError(
@@ -391,7 +388,7 @@ describe('BetContract', () => {
             const betId = betCount - 1n;
 
             /* EXECUTE */
-            const promise = betContract.connect(gelato).fillPrice(betId);
+            const promise = betContract.fillPrice(betId);
 
             /* ASSERT */
             await expect(promise).to.be.revertedWithCustomError(
@@ -399,9 +396,8 @@ describe('BetContract', () => {
             );
         });
 
-        it('rejects if not gelato role', async () => {
+        it('rejects if price already filled', async () => {
             /* SETUP */
-            const account = Math.floor(Math.random() * 2) === 1 ? addr1 : admin;
             const active = true;
             const name = 'New Pool';
             const oracleAddress = mockSourse.target;
@@ -422,13 +418,15 @@ describe('BetContract', () => {
             const betCount = await betContract.betLength();
             const betId = betCount - 1n;
 
+            await betContract.fillPrice(betId);
+
             /* EXECUTE */
-            const promise = betContract.connect(addr1).fillPrice(betId);
+            const promise = betContract.fillPrice(betId);
 
             /* ASSERT */
             await expect(promise).to.be.revertedWithCustomError(
-                betContract, 'AccessManagedUnauthorized'
-            ).withArgs(account.address);
+                betContract, 'PriceAlreadyFilled'
+            );
         });
     });
 

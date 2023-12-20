@@ -49,7 +49,8 @@ contract BetContract is
     error DurationNotAllowed();
     error BetDoesNotExist();
     error BetNotEnded();
-
+    error PriceAlreadyFilled();
+    
     mapping(uint256 => EnumerableSet.UintSet) private poolDurations;
     mapping(uint256 => EnumerableSet.UintSet) private poolSettlementPeriods;
 
@@ -205,15 +206,16 @@ contract BetContract is
      * @notice Fetches the price from Chainlink after the bit duration ends, updates the bid information.
      * @param _betId The ID of the bet.
      */
-    function fillPrice(uint256 _betId) external restricted {
+    function fillPrice(uint256 _betId) external {
         if (_betId >= bets.length) {
             revert BetDoesNotExist();
         }
-
         if (bets[_betId].bidEndTimestamp > block.timestamp) {
             revert BetNotEnded();
         }
-
+        if (bets[_betId].resultPrice != 0) {
+            revert PriceAlreadyFilled();
+        }
         address oracleAddress = pools[bets[_betId].poolId].oracleAddress;
 
         IDataSource priceFeed = IDataSource(oracleAddress);
