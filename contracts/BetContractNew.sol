@@ -10,7 +10,7 @@ import "./SlotManager.sol";
 import "./gelato/Types.sol";
 import "./interfaces/IDataSource.sol";
 
-contract BetContract is
+contract BetContractNew is
     Initializable,
     AccessManagedUpgradeable,
     UUPSUpgradeable
