@@ -22,10 +22,20 @@ contract BetContract is
     address public constant NATIVE_ETH =
         0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
+    struct Pool {
+        bool active;
+        string name;
+        address oracleAddress;
+    }
+
     struct PoolInfo {
         bool active;
         string name;
         address oracleAddress;
+        uint256[] durations;
+        uint256[] settlementPeriods;
+        uint256 oracleCurrentPrice;
+        uint8 oracleDecimals;
     }
 
     struct BetInfo {
@@ -50,11 +60,12 @@ contract BetContract is
     error BetDoesNotExist();
     error BetNotEnded();
     error PriceAlreadyFilled();
-    
+    error OraclePriceIsZero();
+
     mapping(uint256 => EnumerableSet.UintSet) private poolDurations;
     mapping(uint256 => EnumerableSet.UintSet) private poolSettlementPeriods;
 
-    PoolInfo[] private pools;
+    Pool[] private pools;
 
     BetInfo[] private bets;
 
@@ -97,8 +108,11 @@ contract BetContract is
         uint256 bidPrice,
         uint256 predictionPrice,
         uint256 duration,
-        uint256 settlementPeriod
+        uint256 settlementPeriod,
+        uint256 priceAtBid
     );
+
+    event PriceFilled(uint256 indexed betId, uint256 filledPrice);
 
     /**
      * @notice Initializes the contract.
@@ -121,8 +135,14 @@ contract BetContract is
         gelatoAutomate = IAutomate(automateAddress_);
 
         if (automateAddress_ != address(0)) {
+            address proxyModuleAddress = IAutomate(automateAddress_)
+                .taskModuleAddresses(Module.PROXY);
+
+            address opsProxyFactoryAddress = IProxyModule(proxyModuleAddress)
+                .opsProxyFactory();
+
             (gelatoDedicatedMsgSender, ) = IOpsProxyFactory(
-                0xC815dB16D4be6ddf2685C201937905aBf338F5D7
+                opsProxyFactoryAddress
             ).getProxyOf(address(this));
 
             IGelato gelato = IGelato(IAutomate(gelatoAutomate).gelato());
@@ -188,8 +208,11 @@ contract BetContract is
                 betId
             );
 
-            _createGelatoTask(data);
+            _createGelatoTask(data, betId);
         }
+
+        (uint256 price, ) = IDataSource(pools[_poolId].oracleAddress)
+            .getLatestPrice();
 
         emit BetPlaced(
             betId,
@@ -198,8 +221,9 @@ contract BetContract is
             msg.value,
             _predictionPrice,
             _duration,
-            settlementPeriod
-        ); 
+            settlementPeriod,
+            price
+        );
     }
 
     /**
@@ -217,12 +241,15 @@ contract BetContract is
             revert PriceAlreadyFilled();
         }
         address oracleAddress = pools[bets[_betId].poolId].oracleAddress;
+        (uint256 price, ) = IDataSource(oracleAddress).getLatestPrice();
 
-        IDataSource priceFeed = IDataSource(oracleAddress);
-
-        (uint256 price, ) = priceFeed.getLatestPrice();
+        if (price == 0) {
+            revert OraclePriceIsZero();
+        }
 
         bets[_betId].resultPrice = price;
+
+        emit PriceFilled(_betId, price);
 
         _repayGelatoExecution();
     }
@@ -255,11 +282,7 @@ contract BetContract is
         uint256 poolId = pools.length;
 
         pools.push(
-            PoolInfo({
-                active: _active,
-                name: _name,
-                oracleAddress: _oracleAddress
-            })
+            Pool({active: _active, name: _name, oracleAddress: _oracleAddress})
         );
 
         for (uint256 i = 0; i < durationsCount; i++) {
@@ -396,37 +419,43 @@ contract BetContract is
     /**
      * @notice Retrieves information about a specific pool.
      * @param _poolId The ID of the pool.
-     * @return active If the pool is active or not.
-     * @return name The name of the pool.
-     * @return oracleAddress The address of the oracle for the pool.
-     * @return durations An array containing the durations of the pool.
+     * @return pool information.
      */
-    function poolInfo(
-        uint256 _poolId
-    )
-        external
-        view
-        returns (
-            bool active,
-            string memory name,
-            address oracleAddress,
-            uint256[] memory durations,
-            uint256[] memory settlementPeriods
-        )
-    {
+    function poolInfo(uint256 _poolId) public view returns (PoolInfo memory) {
         if (_poolId >= pools.length) {
             revert PoolDoesNotExist();
         }
 
-        PoolInfo memory pool = pools[_poolId];
+        Pool memory pool = pools[_poolId];
 
-        return (
-            pool.active,
-            pool.name,
-            pool.oracleAddress,
-            poolDurations[_poolId].values(),
-            poolSettlementPeriods[_poolId].values()
-        );
+        (uint256 price, uint8 decimals) = IDataSource(pool.oracleAddress)
+            .getLatestPrice();
+
+        return
+            PoolInfo(
+                pool.active,
+                pool.name,
+                pool.oracleAddress,
+                poolDurations[_poolId].values(),
+                poolSettlementPeriods[_poolId].values(),
+                price,
+                decimals
+            );
+    }
+
+    /**
+     * @notice Retrieves information about all pools.
+     * @return pools information.
+     */
+    function getAllPools() external view returns (PoolInfo[] memory) {
+        uint256 length = pools.length;
+        PoolInfo[] memory poolInfos = new PoolInfo[](length);
+
+        for (uint256 i = 0; i < pools.length; i++) {
+            poolInfos[i] = poolInfo(i);
+        }
+
+        return poolInfos;
     }
 
     /**
@@ -489,14 +518,17 @@ contract BetContract is
         allowUpgrade = false;
     }
 
-    function _createGelatoTask(bytes memory data) private returns (bytes32) {
+    function _createGelatoTask(bytes memory data, uint256 id) private returns (bytes32) {
         ModuleData memory moduleData = ModuleData({
-            modules: new Module[](1),
-            args: new bytes[](1)
+            modules: new Module[](2),
+            args: new bytes[](2)
         });
 
-        moduleData.modules[0] = Module.SINGLE_EXEC;
-        moduleData.args[0] = bytes("");
+        moduleData.modules[0] = Module.PROXY;
+        moduleData.args[0] = abi.encode(id);
+
+        moduleData.modules[1] = Module.SINGLE_EXEC;
+        moduleData.args[1] = bytes("");
 
         return
             gelatoAutomate.createTask(

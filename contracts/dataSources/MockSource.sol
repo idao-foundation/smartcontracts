@@ -7,9 +7,13 @@ contract MockSource is IDataSource {
     uint256 public _price;
     uint8 public _decimals;
 
+    event PriceUpdated(uint256 price, uint8 decimals);
+
     function setPrice(uint256 price, uint8 decimals) external {
         _price = price;
         _decimals = decimals;
+
+        emit PriceUpdated(price, decimals);
     }
 
     function getLatestPrice()

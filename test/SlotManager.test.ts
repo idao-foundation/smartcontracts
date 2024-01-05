@@ -9,6 +9,7 @@ import {
     SlotManager__factory
 } from "../typechain-types";
 import { Addressable } from "ethers";
+import { reset } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 
 async function setFunctionRole(
     admin: HardhatEthersSigner,
@@ -35,6 +36,10 @@ describe('SlotManager', () => {
     const globalSlotLimit = 5;
     const ADMIN_ROLE = 0n;
     const SLOT_MANAGER_ROLE = 1n;
+
+    before(async () => {
+        await reset();
+    });
 
     beforeEach(async () => {
         [admin, slotManagerRole, addr1] = await ethers.getSigners();

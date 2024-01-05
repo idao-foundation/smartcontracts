@@ -4,7 +4,7 @@ import "@openzeppelin/hardhat-upgrades";
 import "@nomicfoundation/hardhat-toolbox";
 dotenv.config();
 
-const defaultPk = "0x0000000000000000000000000000000000000000000000000000000000000000";
+const defaultMnemonic = "test test test test test test test test test test test junk";
 const defaultRpc = "http://127.0.0.1"
 
 const config: HardhatUserConfig = {
@@ -18,26 +18,30 @@ const config: HardhatUserConfig = {
     },
   },
   networks: {
-    // hardhat: {
-    //   forking: {
-    //     url: process.env.POLYGON_TESTNET_RPC_URL || defaultRpc,
-    //   }
-    // },
     polygon: {
-      url: process.env.POLYGON_MAINNET_RPC_URL || defaultRpc,
-      accounts: [process.env.DEPLOYER_PRIVATE_KEY || defaultPk],
+      url: process.env.POLYGON_URL || defaultRpc,
+      accounts: { mnemonic: process.env.MNEMONIC || defaultMnemonic },
     },
     mumbai: {
-      url: process.env.POLYGON_TESTNET_RPC_URL || defaultRpc,
-      accounts: [process.env.DEPLOYER_PRIVATE_KEY || defaultPk],
+      url: process.env.MUMBAI_URL || defaultRpc,
+      accounts: { mnemonic: process.env.MNEMONIC || defaultMnemonic },
     },
+    sepolia: {
+      url: process.env.SEPOLIA_URL || defaultRpc,
+      accounts: { mnemonic: process.env.MNEMONIC || defaultMnemonic },
+
+    }
   },
   gasReporter: {
     enabled: process.env.REPORT_GAS !== undefined,
     currency: "USD",
   },
   etherscan: {
-    apiKey: process.env.POLYGONSCAN_API_KEY || ""
+    apiKey: {
+      sepolia: process.env.ETHERSCAN_API_KEY || "",
+      polygon: process.env.POLYGONSCAN_API_KEY || "",
+      mumbai: process.env.POLYGONSCAN_API_KEY || "",
+    }
   },
 };
 

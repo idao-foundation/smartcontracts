@@ -2,17 +2,17 @@ import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers"
 import { ZeroAddress, Addressable } from "ethers";
-import { 
-    AccessManager, 
-    AccessManager__factory, 
-    BetContract, 
-    BetContract__factory, 
-    SlotManager, 
-    SlotManager__factory, 
-    MockSource, 
-    MockSource__factory, 
-    BUSDMock, 
-    BUSDMock__factory 
+import {
+    AccessManager,
+    AccessManager__factory,
+    BetContract,
+    BetContract__factory,
+    SlotManager,
+    SlotManager__factory,
+    MockSource,
+    MockSource__factory,
+    BUSDMock,
+    BUSDMock__factory
 } from "../typechain-types";
 
 import { reset } from "@nomicfoundation/hardhat-toolbox/network-helpers"
@@ -144,7 +144,7 @@ describe('BetContract', () => {
             expect(settlementPeriods[0]).to.be.equal(bidSettlementTimestamp);
 
             await expect(tx).to.emit(betContract, 'BetPlaced')
-                .withArgs(betId, poolId, addr1.address, amount, nativeFeeAmount, duration, settlementPeriods[0]);
+                .withArgs(betId, poolId, addr1.address, amount, nativeFeeAmount, duration, settlementPeriods[0], ORACLE_PRICE);
         });
 
         it('should revert when pool does not exist', async () => {
@@ -721,7 +721,7 @@ describe('BetContract', () => {
         beforeEach(async () => {
             activeBefore = true;
             nameBefore = 'New Pool';
-            oracleAddressBefore = mockSourse.target;
+            oracleAddressBefore = '0xCC79157eb46F5624204f47AB42b3906cAA40eaB7';
             durationsBefore = [1n, 2n, 3n];
             settlementPeriodsBefore = [10n, 20n, 30n];
 
@@ -735,7 +735,7 @@ describe('BetContract', () => {
             /* SETUP */
             const active = false;
             const name = 'Updated Pool';
-            const oracleAddress = '0xCC79157eb46F5624204f47AB42b3906cAA40eaB7';
+            const oracleAddress = mockSourse.target;
             const durations = [1n, 2n, 3n, 4n];
             const settlementPeriods = [10n, 20n, 30n, 40n];
 
@@ -743,12 +743,14 @@ describe('BetContract', () => {
             const tx = await betContract.connect(admin).editPool(poolId, active, name, oracleAddress, durations, settlementPeriods);
 
             /* ASSERT */
-            const [currentActive, currentName, currentOracleAddress, currentDurations, currentSettlementPeriods] = await betContract.poolInfo(poolId);
+            const [currentActive, currentName, currentOracleAddress, currentDurations, currentSettlementPeriods, oraclePrice, oracleDecimals] = await betContract.poolInfo(poolId);
 
             expect(active).to.be.equal(currentActive);
             expect(name).to.be.equal(currentName);
-            expect(oracleAddress).to.be.equal(currentOracleAddress);
+            expect(mockSourse.target.toString()).to.be.equal(currentOracleAddress);
             expect(durations).to.deep.equal(currentDurations);
+            expect(oraclePrice).to.be.equal(ORACLE_PRICE);
+            expect(oracleDecimals).to.be.equal(ORACLE_DECIMALS);
 
             expect(activeBefore).not.to.be.equal(currentActive);
             expect(nameBefore).not.to.be.equal(currentName);
@@ -879,7 +881,7 @@ describe('BetContract', () => {
             const poolId = poolCount - 1n;
 
             /* EXECUTE */
-            const [currentActive, currentName, currentOracleAddress, currentDurations, currentSettlementPeriods] = await betContract.poolInfo(poolId);
+            const [currentActive, currentName, currentOracleAddress, currentDurations, currentSettlementPeriods, oraclePrice, oracleDecimals] = await betContract.poolInfo(poolId);
 
             /* ASSERT */
             expect(active).to.be.equal(currentActive);
@@ -887,6 +889,39 @@ describe('BetContract', () => {
             expect(oracleAddress).to.be.equal(currentOracleAddress);
             expect(durations).to.deep.equal(currentDurations);
             expect(settlementPeriods).to.deep.equal(currentSettlementPeriods);
+            expect(oraclePrice).to.be.equal(ORACLE_PRICE);
+            expect(oracleDecimals).to.be.equal(ORACLE_DECIMALS);
+        });
+
+        it('should get all pools info', async () => {
+            for (let i = 0; i < 5; i++) {
+                const active = true;
+                const name = 'New Pool';
+                const oracleAddress = mockSourse.target;
+                const durations = [i + 1, i + 2, i + 3];
+                const settlementPeriods = [i + 10, i + 20, i + 30];
+
+                await betContract.connect(admin).createPool(active, name, oracleAddress, durations, settlementPeriods);
+            }
+
+            /* EXECUTE */
+            const pools = await betContract.getAllPools();
+
+            /* ASSERT */
+            expect(pools.length).to.equal(5);
+
+            for (let i = 0; i < 5; i++) {
+                const durations = [i + 1, i + 2, i + 3];
+                const settlementPeriods = [i + 10, i + 20, i + 30];
+
+                expect(pools[i].active).to.be.equal(true);
+                expect(pools[i].name).to.be.equal('New Pool');
+                expect(pools[i].oracleAddress).to.be.equal(mockSourse.target);
+                expect(pools[i].durations).to.deep.equal(durations);
+                expect(pools[i].settlementPeriods).to.deep.equal(settlementPeriods);
+                expect(pools[i].oracleCurrentPrice).to.be.equal(ORACLE_PRICE);
+                expect(pools[i].oracleDecimals).to.be.equal(ORACLE_DECIMALS);
+            }
         });
 
         it('should revert when pool does not exist', async () => {
