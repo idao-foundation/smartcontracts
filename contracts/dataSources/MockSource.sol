@@ -24,4 +24,8 @@ contract MockSource is IDataSource {
     {
         return (_price, _decimals);
     }
+
+    function eventSource() external view override returns (address) {
+        return address(this);
+    }
 }

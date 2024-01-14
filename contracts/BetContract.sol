@@ -36,6 +36,7 @@ contract BetContract is
         uint256[] settlementPeriods;
         uint256 oracleCurrentPrice;
         uint8 oracleDecimals;
+        address eventSource;
     }
 
     struct BetInfo {
@@ -108,6 +109,7 @@ contract BetContract is
         uint256 bidPrice,
         uint256 predictionPrice,
         uint256 duration,
+        uint256 bidEndTimestamp,
         uint256 settlementPeriod,
         uint256 priceAtBid
     );
@@ -190,6 +192,8 @@ contract BetContract is
             }
         }
 
+        uint256 bidEndTimestamp = block.timestamp + _duration;
+
         bets.push(
             BetInfo({
                 bidder: msg.sender,
@@ -197,7 +201,7 @@ contract BetContract is
                 bidPrice: _predictionPrice,
                 resultPrice: 0,
                 bidStartTimestamp: block.timestamp,
-                bidEndTimestamp: block.timestamp + _duration,
+                bidEndTimestamp: bidEndTimestamp,
                 bidSettleTimestamp: settlementPeriod
             })
         );
@@ -221,6 +225,7 @@ contract BetContract is
             msg.value,
             _predictionPrice,
             _duration,
+            bidEndTimestamp,
             settlementPeriod,
             price
         );
@@ -439,7 +444,8 @@ contract BetContract is
                 poolDurations[_poolId].values(),
                 poolSettlementPeriods[_poolId].values(),
                 price,
-                decimals
+                decimals,
+                IDataSource(pool.oracleAddress).eventSource()
             );
     }
 
@@ -518,7 +524,10 @@ contract BetContract is
         allowUpgrade = false;
     }
 
-    function _createGelatoTask(bytes memory data, uint256 id) private returns (bytes32) {
+    function _createGelatoTask(
+        bytes memory data,
+        uint256 id
+    ) private returns (bytes32) {
         ModuleData memory moduleData = ModuleData({
             modules: new Module[](2),
             args: new bytes[](2)

@@ -6,4 +6,6 @@ interface IDataSource {
         external
         view
         returns (uint256 value, uint8 decimals);
+
+    function eventSource() external view returns (address);
 }

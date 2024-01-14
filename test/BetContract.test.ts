@@ -144,7 +144,7 @@ describe('BetContract', () => {
             expect(settlementPeriods[0]).to.be.equal(bidSettlementTimestamp);
 
             await expect(tx).to.emit(betContract, 'BetPlaced')
-                .withArgs(betId, poolId, addr1.address, amount, nativeFeeAmount, duration, settlementPeriods[0], ORACLE_PRICE);
+                .withArgs(betId, poolId, addr1.address, amount, nativeFeeAmount, duration, bidEndTimestamp, settlementPeriods[0], ORACLE_PRICE);
         });
 
         it('should revert when pool does not exist', async () => {

@@ -20,4 +20,8 @@ contract ChainlinkSource is IDataSource {
         (, int256 answer, , , ) = oracle.latestRoundData();
         return (uint256(answer), oracle.decimals());
     }
+
+    function eventSource() external view override returns (address) {
+        return oracle.aggregator();
+    }
 }
