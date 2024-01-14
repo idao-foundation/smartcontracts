@@ -10,6 +10,7 @@ import {
     BUSDMock,
     BUSDMock__factory
 } from "../typechain-types";
+import { reset } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 
 describe('NicknameRegistry', () => {
     let manager: AccessManager;
@@ -22,6 +23,10 @@ describe('NicknameRegistry', () => {
 
     const nicknameFee = 1;
     const ADMIN_ROLE = 0n;
+
+    before(async () => {
+        await reset();
+    });
 
     beforeEach(async () => {
         [admin, fundingWallet, addr1, addr2] = await ethers.getSigners();
