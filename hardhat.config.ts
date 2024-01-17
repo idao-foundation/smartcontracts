@@ -17,6 +17,9 @@ const config: HardhatUserConfig = {
       },
     },
   },
+  mocha: {
+    timeout: 10000000000000
+  },
   networks: {
     polygon: {
       url: process.env.POLYGON_URL || defaultRpc,
@@ -29,7 +32,9 @@ const config: HardhatUserConfig = {
     sepolia: {
       url: process.env.SEPOLIA_URL || defaultRpc,
       accounts: { mnemonic: process.env.MNEMONIC || defaultMnemonic },
-
+    },
+    node: {
+      url: "http://127.0.0.1:8545/"
     }
   },
   gasReporter: {
