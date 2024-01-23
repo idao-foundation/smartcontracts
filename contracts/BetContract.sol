@@ -82,6 +82,9 @@ contract BetContract is
 
     bool private allowUpgrade;
 
+    // TODO: Mapping placed here for upgrade safety, should be moved to a mappings section
+    mapping(address => uint256) public userBetCount;
+
     event PoolCreated(
         uint256 indexed poolId,
         bool active,
@@ -218,6 +221,8 @@ contract BetContract is
         (uint256 price, ) = IDataSource(pools[_poolId].oracleAddress)
             .getLatestPrice();
 
+        userBetCount[msg.sender]++;
+
         emit BetPlaced(
             betId,
             _poolId,
@@ -253,6 +258,8 @@ contract BetContract is
         }
 
         bets[_betId].resultPrice = price;
+
+        slotManager.freeSlot(bets[_betId].bidder);
 
         emit PriceFilled(_betId, price);
 
@@ -395,6 +402,13 @@ contract BetContract is
             revert AmountIsZero();
         }
         nativeFee = _amount;
+    }
+
+    function setUserBetCount(
+        uint256 _betCount,
+        address _user
+    ) external restricted {
+        userBetCount[_user] = _betCount;
     }
 
     /**
