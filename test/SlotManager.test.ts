@@ -1,7 +1,6 @@
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers"
-import { Manager } from "../typechain-types/contracts/Manager";
 import { 
     AccessManager, 
     AccessManager__factory, 
@@ -28,7 +27,7 @@ async function setFunctionRole(
 }
 
 describe('SlotManager', () => {
-    let manager: Manager;
+    let manager: AccessManager;
     let slotManager: SlotManager;
     let admin: HardhatEthersSigner;
     let slotManagerRole: HardhatEthersSigner;
