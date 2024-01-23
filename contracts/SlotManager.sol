@@ -4,6 +4,7 @@ pragma solidity 0.8.23;
 import "@openzeppelin/contracts-upgradeable/access/manager/AccessManagedUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "./IdaoErrors.sol";
 
 /**
  * @notice SlotManager manages address slots and slot limits.
@@ -11,12 +12,9 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 contract SlotManager is
     Initializable,
     AccessManagedUpgradeable,
+    IdaoErrors,
     UUPSUpgradeable
 {
-    error SlotLimitReached();
-    error NoSlotsToFree();
-    error UpgradeDenied();
-
     uint256 public globalSlotLimit;
 
     bool private allowUpgrade;

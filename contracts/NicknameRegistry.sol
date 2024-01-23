@@ -4,15 +4,10 @@ pragma solidity 0.8.23;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/access/manager/AccessManaged.sol";
+import "./IdaoErrors.sol";
 
-contract NicknameRegistry is AccessManaged {
+contract NicknameRegistry is AccessManaged, IdaoErrors {
     using Address for address payable;
-
-    error ZeroAddress();
-    error UnsupportedPaymentToken();
-    error IncorrectFeeAmount();
-    error NicknameIsAlreadyTaken();
-    error AddressAlreadyHasNickname(string nickname);
 
     address public fundingWallet;
     uint256 public nicknameFee;

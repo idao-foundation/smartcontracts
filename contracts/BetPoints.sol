@@ -5,10 +5,16 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/manager/AccessManagedUpgradeable.sol";
 import "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import "./IdaoErrors.sol";
 
 import "hardhat/console.sol";
 
-contract BetPoints is Initializable, AccessManagedUpgradeable, UUPSUpgradeable {
+contract BetPoints is
+    Initializable,
+    AccessManagedUpgradeable,
+    IdaoErrors,
+    UUPSUpgradeable
+{
     uint256 pointsPerRating18;
     uint256 minPoints18;
     uint256 avgPoints18;
@@ -30,9 +36,6 @@ contract BetPoints is Initializable, AccessManagedUpgradeable, UUPSUpgradeable {
     }
 
     mapping(bytes32 => Rating) public rating;
-
-    error UpgradeDenied();
-    error NotInitialized();
 
     function initialize(address manager) public initializer {
         __AccessManaged_init(manager);

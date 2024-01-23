@@ -9,10 +9,12 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./SlotManager.sol";
 import "./gelato/Types.sol";
 import "./interfaces/IDataSource.sol";
+import "./IdaoErrors.sol";
 
 contract BetContract is
     Initializable,
     AccessManagedUpgradeable,
+    IdaoErrors,
     UUPSUpgradeable
 {
     using EnumerableSet for EnumerableSet.UintSet;
@@ -48,20 +50,6 @@ contract BetContract is
         uint256 bidEndTimestamp;
         uint256 bidSettleTimestamp;
     }
-
-    error DataLengthsIsZero();
-    error DataLengthsMismatch();
-    error AmountIsZero();
-    error InsufficientFunds();
-    error ZeroAddress();
-    error PoolDoesNotExist();
-    error PoolIsInactive();
-    error UpgradeDenied();
-    error DurationNotAllowed();
-    error BetDoesNotExist();
-    error BetNotEnded();
-    error PriceAlreadyFilled();
-    error OraclePriceIsZero();
 
     mapping(uint256 => EnumerableSet.UintSet) private poolDurations;
     mapping(uint256 => EnumerableSet.UintSet) private poolSettlementPeriods;
