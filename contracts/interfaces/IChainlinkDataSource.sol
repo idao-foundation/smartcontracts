@@ -2,6 +2,12 @@
 pragma solidity ^0.8.0;
 
 interface IChainlinkDataSource {
+    event AnswerUpdated(
+        int256 indexed current,
+        uint256 indexed roundId,
+        uint256 updatedAt
+    );
+
     function decimals() external view returns (uint8);
 
     function description() external view returns (string memory);
