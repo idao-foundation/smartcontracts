@@ -2,15 +2,26 @@ import hre, { ethers, upgrades } from "hardhat";
 import { BetContract } from "../typechain-types";
 
 async function main() {
+    let betContract = await ethers.getContractAt("BetContract", "0x2e0C9c8cA221eb03DbCEd4F1FDfAF2b2a7792D5c");
+    let implAddress = await upgrades.erc1967.getImplementationAddress(betContract.target.toString());
+    console.log("BetContract initial impl:", implAddress);
+
     const BetContract = await ethers.getContractFactory("BetContract");
-    const betContract = await upgrades.upgradeProxy(
+    betContract = await upgrades.upgradeProxy(
         "0x2e0C9c8cA221eb03DbCEd4F1FDfAF2b2a7792D5c",
         BetContract
     ) as unknown as BetContract;
 
-    await new Promise(resolve => setTimeout(resolve, 60000));
+    console.log("BetContract upgrade submitted");
+    while (true) {
+        const newImplAddress = await upgrades.erc1967.getImplementationAddress(betContract.target.toString());
+        if (implAddress !== newImplAddress) {
+            implAddress = newImplAddress;
+            break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
 
-    const implAddress = await upgrades.erc1967.getImplementationAddress(betContract.target.toString());
 
     console.log("BetContract upgraded to impl:", implAddress);
 
