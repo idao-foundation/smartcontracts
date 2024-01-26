@@ -38,6 +38,13 @@ async function main() {
         total: bets.length,
         grouped: unique,
     });
+
+    // Update total users count
+    // for (let i = 0; i < unique.length; i++) {
+    //     console.log("Counting user", unique[i].address);
+    //     const tx = await betContract.countUser(unique[i].address);
+    //     await tx.wait();
+    // }
 }
 
 main().catch((error) => {
