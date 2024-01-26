@@ -72,6 +72,9 @@ contract BetContract is
 
     // TODO: Mapping placed here for upgrade safety, should be moved to a mappings section
     mapping(address => uint256) public userBetCount;
+    mapping(address => bool) private userCounted;
+
+    uint256 public userCount;
 
     event PoolCreated(
         uint256 indexed poolId,
@@ -170,6 +173,11 @@ contract BetContract is
         }
         if (!poolDurations[_poolId].contains(_duration)) {
             revert DurationNotAllowed();
+        }
+
+        if (!userCounted[msg.sender]) {
+            userCount++;
+            userCounted[msg.sender] = true;
         }
 
         slotManager.redeemSlot(msg.sender);
@@ -397,6 +405,13 @@ contract BetContract is
         address _user
     ) external restricted {
         userBetCount[_user] = _betCount;
+    }
+
+    function countUser(address _user) external restricted {
+        if (!userCounted[_user]) {
+            userCount++;
+            userCounted[_user] = true;
+        }
     }
 
     /**
