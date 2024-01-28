@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import { ethers, upgrades } from "hardhat";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers"
 import { ZeroAddress } from "ethers";
 import {
@@ -10,7 +10,6 @@ import {
     BUSDMock,
     BUSDMock__factory
 } from "../typechain-types";
-import { reset } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 
 describe('NicknameRegistry', () => {
     let manager: AccessManager;
@@ -24,10 +23,6 @@ describe('NicknameRegistry', () => {
     const nicknameFee = 1;
     const ADMIN_ROLE = 0n;
 
-    before(async () => {
-        await reset();
-    });
-
     beforeEach(async () => {
         [admin, fundingWallet, addr1, addr2] = await ethers.getSigners();
 
@@ -38,7 +33,11 @@ describe('NicknameRegistry', () => {
         manager = await Manager.deploy(admin.address);
 
         const NicknameRegistry = (await ethers.getContractFactory('NicknameRegistry')) as NicknameRegistry__factory;
-        nicknameRegistry = await NicknameRegistry.deploy(manager.target, fundingWallet.address, nicknameFee);
+        nicknameRegistry = await upgrades.deployProxy(NicknameRegistry, [
+            manager.target, fundingWallet.address, nicknameFee
+        ]) as unknown as NicknameRegistry;
+    
+        await nicknameRegistry.waitForDeployment();
     });
 
     describe('Initialize', async () => {
@@ -419,6 +418,38 @@ describe('NicknameRegistry', () => {
 
             /* ASSERT */
             expect(addr1Nickname).to.equal(nickname);
+        });
+    });
+
+    describe('upgradeToAndCall', async () => {
+        let newImplementation: NicknameRegistry;
+
+        beforeEach(async () => {
+            const factory = await ethers.getContractFactory("NicknameRegistry");
+            newImplementation = await factory.deploy();
+        });
+
+        it('should upgrade to a new implementation', async () => {
+            /* SETUP */
+            const implementationBefore = await upgrades.erc1967.getImplementationAddress(nicknameRegistry.target as string);
+
+            /* EXECUTE */
+            await nicknameRegistry.connect(admin).upgradeToAndCall(newImplementation.target, "0x");
+
+            /* ASSERT */
+            const implementationAfter = await upgrades.erc1967.getImplementationAddress(nicknameRegistry.target as string);
+
+            expect(implementationBefore).not.to.equal(implementationAfter);
+        });
+
+        it('rejects if not admin role', async function () {
+            /* EXECUTE */
+            const promise = nicknameRegistry.connect(addr1).upgradeToAndCall(newImplementation.target, "0x");
+
+            /* ASSERT */
+            await expect(promise).to.be.revertedWithCustomError(
+                nicknameRegistry, 'AccessManagedUnauthorized'
+            ).withArgs(addr1.address);
         });
     });
 });

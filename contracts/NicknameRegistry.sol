@@ -1,20 +1,28 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.23;
 
+import "@openzeppelin/contracts-upgradeable/access/manager/AccessManagedUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
-import "@openzeppelin/contracts/access/manager/AccessManaged.sol";
 import "./IdaoErrors.sol";
 
-contract NicknameRegistry is AccessManaged, IdaoErrors {
+contract NicknameRegistry is
+    Initializable,
+    AccessManagedUpgradeable,
+    IdaoErrors,
+    UUPSUpgradeable
+{
     using Address for address payable;
 
     address public fundingWallet;
     uint256 public nicknameFee;
+    bool private allowUpgrade;
 
+    mapping(address => uint256) public tokenPaymentAmounts;
     mapping(bytes32 => address) private nicknameToAddress;
     mapping(address => string) private addressToNickname;
-    mapping(address => uint256) public tokenPaymentAmounts;
 
     event NicknameCreated(address indexed account, string nickname);
 
@@ -24,11 +32,14 @@ contract NicknameRegistry is AccessManaged, IdaoErrors {
      * @param fundingWallet_ The address of the funding wallet.
      * @param fee_ The fee amount for creating a nickname.
      */
-    constructor(
+    function initialize(
         address initialAuthority_,
         address fundingWallet_,
         uint256 fee_
-    ) AccessManaged(initialAuthority_) {
+    ) external initializer {
+        __AccessManaged_init(initialAuthority_);
+        __UUPSUpgradeable_init();
+
         fundingWallet = fundingWallet_;
         nicknameFee = fee_;
     }
@@ -111,6 +122,23 @@ contract NicknameRegistry is AccessManaged, IdaoErrors {
         address _account
     ) external view returns (string memory) {
         return addressToNickname[_account];
+    }
+
+    function upgradeToAndCall(
+        address newImplementation,
+        bytes memory data
+    ) public payable override restricted {
+        allowUpgrade = true;
+
+        super.upgradeToAndCall(newImplementation, data);
+    }
+
+    function _authorizeUpgrade(address) internal override {
+        if (!allowUpgrade) {
+            // This path may not be reachable
+            revert UpgradeDenied();
+        }
+        allowUpgrade = false;
     }
 
     /**

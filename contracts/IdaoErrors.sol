@@ -22,4 +22,7 @@ contract IdaoErrors {
     error AddressAlreadyHasNickname(string nickname);
     error SlotLimitReached();
     error NoSlotsToFree();
+    error ExpiredDeadline();
+    error InvalidSignature();
+    error InvalidNonce();
 }
