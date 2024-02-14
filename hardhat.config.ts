@@ -11,16 +11,20 @@ const config: HardhatUserConfig = {
   solidity: {
     version: "0.8.23",
     settings: {
+      viaIR: true,
       optimizer: {
         enabled: true,
         runs: 1000000,
       },
     },
   },
-  mocha: {
-    timeout: 10000000000000
-  },
   networks: {
+    hardhat:{
+      forking: {
+        enabled: false,
+        url: process.env.POLYGON_URL || defaultRpc,
+      }
+    },
     polygon: {
       url: process.env.POLYGON_URL || defaultRpc,
       accounts: { mnemonic: process.env.MNEMONIC || defaultMnemonic },
@@ -31,6 +35,18 @@ const config: HardhatUserConfig = {
     },
     sepolia: {
       url: process.env.SEPOLIA_URL || defaultRpc,
+      accounts: { mnemonic: process.env.MNEMONIC || defaultMnemonic },
+    },
+    bsc: {
+      url: process.env.BSC_URL || defaultRpc,
+      accounts: { mnemonic: process.env.MNEMONIC || defaultMnemonic },
+    },
+    arbitrum: {
+      url: process.env.ARBITRUM_URL || defaultRpc,
+      accounts: { mnemonic: process.env.MNEMONIC || defaultMnemonic },
+    },
+    optimism: {
+      url: process.env.OPTIMISM_URL || defaultRpc,
       accounts: { mnemonic: process.env.MNEMONIC || defaultMnemonic },
     },
     node: {
@@ -46,6 +62,9 @@ const config: HardhatUserConfig = {
       sepolia: process.env.ETHERSCAN_API_KEY || "",
       polygon: process.env.POLYGONSCAN_API_KEY || "",
       mumbai: process.env.POLYGONSCAN_API_KEY || "",
+      bsc: process.env.BSCSCAN_API_KEY || "",
+      arbitrumOne: process.env.ARBITRUMSCAN_API_KEY || "",
+      optimisticEthereum: process.env.OPTIMISMSCAN_API_KEY || "",
     }
   },
 };
