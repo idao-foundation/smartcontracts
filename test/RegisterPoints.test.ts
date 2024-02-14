@@ -8,6 +8,7 @@ import {
     RegisterPoints,
     RegisterPoints__factory
 } from "../typechain-types";
+import { reset } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 
 async function getLatestBlockTimestamp(): Promise<number> {
     const block = await ethers.provider.getBlock('latest', true);
@@ -23,6 +24,10 @@ describe("RegisterPoints", () => {
     const ADMIN_ROLE = 0n;
     const name = "RegisterPoints";
     const version = "1";
+
+    before(async () => {
+        await reset();
+    });
 
     beforeEach(async () => {
         [admin, addr1, addr2] = await ethers.getSigners();
