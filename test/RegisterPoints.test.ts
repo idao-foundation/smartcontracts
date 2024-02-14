@@ -10,27 +10,20 @@ import {
 } from "../typechain-types";
 import { reset } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 
-async function getLatestBlockTimestamp(): Promise<number> {
-    const block = await ethers.provider.getBlock('latest', true);
-    return block?.timestamp || 0;
-}
-
 describe("RegisterPoints", () => {
     let manager: AccessManager;
     let registerPoints: RegisterPoints;
     let admin: HardhatEthersSigner;
+    let forecastPointsIssuer: HardhatEthersSigner;
     let addr1: HardhatEthersSigner;
-    let addr2: HardhatEthersSigner;
     const ADMIN_ROLE = 0n;
-    const name = "RegisterPoints";
-    const version = "1";
 
     before(async () => {
         await reset();
     });
 
     beforeEach(async () => {
-        [admin, addr1, addr2] = await ethers.getSigners();
+        [admin, forecastPointsIssuer, addr1] = await ethers.getSigners();
 
         const Manager = (await ethers.getContractFactory('AccessManager')) as AccessManager__factory;
         manager = await Manager.deploy(admin.address);
@@ -38,40 +31,45 @@ describe("RegisterPoints", () => {
         const RegisterPoints = (await ethers.getContractFactory('RegisterPoints')) as RegisterPoints__factory;
         registerPoints = await upgrades.deployProxy(
             RegisterPoints,
-            [manager.target, name, version],
+            [manager.target],
             { initializer: 'initialize', kind: 'uups' }
         ) as unknown as RegisterPoints;
+
+        await manager.connect(admin).grantRole(await registerPoints.FORECAST_POINTS_ISSUER_ROLE(), forecastPointsIssuer.address, 0);
     });
 
     describe('initial values', async () => {
         it('should set role', async () => {
+            /* EXECUTE */
             const [isAdmin,] = await manager.hasRole(ADMIN_ROLE, admin.address);
+            const [isForecastPointsIssuer,] = await manager.hasRole(await registerPoints.FORECAST_POINTS_ISSUER_ROLE(), forecastPointsIssuer.address);
+
+            /* ASSERT */
             expect(isAdmin).to.be.true;
+            expect(isForecastPointsIssuer).to.be.true;
         })
     });
 
-    describe('addPoints', async () => {
-        async function EIP712Fixture(nonce: number = 0) {
-            const txTimestamp = await getLatestBlockTimestamp() + 3600;
-
+    describe('claimPoints', async () => {
+        async function EIP712Fixture(account: string, points: bigint, nonce: number = 0) {
             const data = {
-                deadline: txTimestamp,
+                amount: points,
+                receiver: account,
                 nonce: nonce,
             }
 
-            const signature = await signHardhat(admin, registerPoints.target as string, data);
+            const signature = await signHardhat(forecastPointsIssuer, registerPoints.target as string, data);
             const sig = ethers.Signature.from(signature);
 
             return { data, sig };
         }
 
-        async function addPointsWithSignature(accounts: string[], points: bigint[], nonce: number) {
-            const { data, sig } = await EIP712Fixture(nonce);
+        async function claimPointsWithSignature(account: string, points: bigint, nonce: number) {
+            const { data, sig } = await EIP712Fixture(account, points, nonce);
 
-            return registerPoints.addPoints(
-                accounts,
+            return registerPoints.claimPoints(
+                account,
                 points,
-                data.deadline,
                 data.nonce,
                 sig.v,
                 sig.r,
@@ -82,80 +80,66 @@ describe("RegisterPoints", () => {
         it('adds points succesfully', async () => {
             /* SETUP */
             const nonce = 0;
-            const accounts = [addr1.address, addr2.address];
-            const points = [ethers.parseUnits("1000"), ethers.parseUnits("2000")];
+            const account = addr1.address;
+            const points = ethers.parseUnits("1000");
 
             /* ASSERT */
-            expect(await registerPoints.nonces(admin.address, nonce)).to.be.false;
+            expect(await registerPoints.isNonceUsed(nonce)).to.be.false;
 
             /* EXECUTE */
-            const tx = await addPointsWithSignature(accounts, points, nonce);
+            const tx = await claimPointsWithSignature(account, points, nonce);
 
             /* ASSERT */
-            expect(await registerPoints.nonces(admin.address, nonce)).to.be.true;
+            expect(await registerPoints.isNonceUsed(nonce)).to.be.true;
+            expect(await registerPoints.batchIsNonceUsed([nonce])).to.deep.equal([true]);
+            expect(await registerPoints.pointsBalance(account)).to.equal(points);
 
-            for (let i = 0; i < accounts.length; i++) {
-                expect(await registerPoints.pointsBalance(accounts[i])).to.equal(points[i]);
-
-                await expect(tx).to.emit(registerPoints, 'PointsAdded')
-                    .withArgs(accounts[i], points[i]);
-            }
+            await expect(tx).to.emit(registerPoints, 'PointsAdded')
+                .withArgs(account, points);
         });
 
         it('adds points if points were added previously', async () => {
             /* SETUP */
             let nonce = 0;
-            const accounts = [addr1.address, addr2.address];
-            const points = [ethers.parseUnits("1000"), ethers.parseUnits("2000")];
+            const account = addr1.address;
+            const points = ethers.parseUnits("1000");
 
-            await addPointsWithSignature(accounts, points, nonce);
+            await claimPointsWithSignature(account, points, nonce);
 
             /* EXECUTE */
-            await addPointsWithSignature(accounts, points, ++nonce);
+            await claimPointsWithSignature(account, points, ++nonce);
 
             /* ASSERT */
-            for (let i = 0; i < accounts.length; i++) {
-                expect(await registerPoints.pointsBalance(accounts[i])).to.equal(points[i] * 2n);
-            }
+            expect(await registerPoints.pointsBalance(account)).to.equal(points * 2n);
         });
 
-        it('rejects when expired deadline', async () => {
+        it('rejects when invalid nonce', async () => {
             /* SETUP */
-            const { data, sig } = await EIP712Fixture();
+            const nonce = 0;
+            const account = addr1.address;
+            const points = ethers.parseUnits("1000");
 
-            ethers.provider.send("evm_increaseTime", [3601]);
-
-            const accounts = [addr1.address, addr2.address];
-            const points = [ethers.parseUnits("1000"), ethers.parseUnits("2000")];
+            await claimPointsWithSignature(account, points, nonce);
 
             /* EXECUTE */
-            const promise = registerPoints.addPoints(
-                accounts,
-                points,
-                data.deadline,
-                data.nonce,
-                sig.v,
-                sig.r,
-                sig.s
-            );
+            const promise = claimPointsWithSignature(account, points, nonce);
 
             /* ASSERT */
-            await expect(promise).to.be.revertedWithCustomError(registerPoints, "ExpiredDeadline");
+            await expect(promise).to.be.revertedWithCustomError(registerPoints, "InvalidNonce");
         });
 
         it('rejects when invalid signature', async () => {
             /* SETUP */
-            const { data, sig } = await EIP712Fixture();
+            const nonce = 0;
+            const account = addr1.address;
+            const points = ethers.parseUnits("1000");
 
-            const accounts = [addr1.address, addr2.address];
-            const points = [ethers.parseUnits("1000"), ethers.parseUnits("2000")];
-            const invalidDeadline = data.deadline + 1;
+            const { data, sig } = await EIP712Fixture(account, points, nonce);
 
             /* EXECUTE */
-            const promise = registerPoints.addPoints(
-                accounts,
-                points,
-                invalidDeadline,
+            const promise = registerPoints.claimPoints(
+                admin.address,
+                ethers.parseUnits("100"),
                 data.nonce,
                 sig.v,
                 sig.r,
@@ -165,48 +149,18 @@ describe("RegisterPoints", () => {
             /* ASSERT */
             await expect(promise).to.be.revertedWithCustomError(registerPoints, "InvalidSignature");
         });
+    });
 
-        it('rejects when invalid nonce', async () => {
+    describe('batchIsNonceUsed', async () => {
+        it('should return false if nonces is not used', async () => {
             /* SETUP */
-            const nonce = 0;
-            const accounts = [addr1.address, addr2.address];
-            const points = [ethers.parseUnits("1000"), ethers.parseUnits("2000")];
-
-            await addPointsWithSignature(accounts, points, nonce);
+            const nonces = [0, 1];
 
             /* EXECUTE */
-            const promise = addPointsWithSignature(accounts, points, nonce);
+            const result = await registerPoints.batchIsNonceUsed(nonces);
 
             /* ASSERT */
-            await expect(promise).to.be.revertedWithCustomError(registerPoints, "InvalidNonce");
-        });
-
-        it('should revert when users and points length are not the same', async () => {
-            /* SETUP */
-            const nonce = 0;
-            const accounts = [addr1.address];
-            const points = [ethers.parseUnits("1000"), ethers.parseUnits("2000")];
-
-            /* EXECUTE */
-            const promise = addPointsWithSignature(accounts, points, nonce);
-
-            /* ASSERT */
-            await expect(promise)
-                .to.be.revertedWithCustomError(registerPoints, "DataLengthsMismatch");
-        });
-
-        it('should revert when users length is zero', async () => {
-            /* SETUP */
-            const nonce = 0;
-            const accounts: string[] = [];
-            const points = [ethers.parseUnits("1000"), ethers.parseUnits("2000")];
-
-            /* EXECUTE */
-            const promise = addPointsWithSignature(accounts, points, nonce);
-
-            /* ASSERT */
-            await expect(promise)
-                .to.be.revertedWithCustomError(registerPoints, "DataLengthsIsZero");
+            expect(result).to.deep.equal([false, false]);
         });
     });
 

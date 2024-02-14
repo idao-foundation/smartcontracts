@@ -49,8 +49,8 @@ contract RegisterPoints is
     }
 
     /**
-     * @notice Adds the points for the users.
-     * @param _user The user addresses.
+     * @notice Adds the points for the user.
+     * @param _user The user address.
      * @param _points Amount of points to claim.
      * @param _nonce The unique random nonce.
      * @param _v the recovery byte of the signature.
@@ -79,6 +79,10 @@ contract RegisterPoints is
         return userPoints[_user];
     }
 
+/**
+ * @notice Checks if multiple nonces have been used.
+ * @param _nonces An array of nonces to check.
+ */
     function batchIsNonceUsed(
         uint256[] calldata _nonces
     ) external view returns (bool[] memory) {

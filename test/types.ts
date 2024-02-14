@@ -1,28 +1,30 @@
 const PermissionStructure = [
-    { name: 'deadline', type: 'uint256' },
+    { name: 'amount', type: 'uint256'},
+    { name: 'receiver', type: 'address'},
     { name: 'nonce', type: 'uint256' },
   ];
   
   export interface IPermissionStructure {
-    deadline: number;
+    amount: bigint;
+    receiver: string;
     nonce: number;
   }
   
   export function buildDefaultStructure(chainId: number, verifyingContract: string, data: IPermissionStructure) {
-    const { deadline, nonce } = data;
+    const { amount, receiver, nonce } = data;
     return {
       domain: {
-        name: "RegisterPoints",
-        version: "1",
+        name: "IDAO.Forecast.Contracts.RegisterPoints",
+        version: "1.0.0",
         chainId,
         verifyingContract
       },
       message: {
-        deadline, nonce
+        amount, receiver, nonce
       },
-      primaryType: 'PermissionStructure',
+      primaryType: 'ClaimForecastPoints',
       types: {
-        PermissionStructure: PermissionStructure
+        ClaimForecastPoints: PermissionStructure
       }
     }
   }
