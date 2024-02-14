@@ -79,11 +79,9 @@ contract RegisterPoints is
         return userPoints[_user];
     }
 
-    function batchIsNonceUsed(uint256[] calldata _nonces)
-        external
-        view
-        returns (bool[] memory)
-    {
+    function batchIsNonceUsed(
+        uint256[] calldata _nonces
+    ) external view returns (bool[] memory) {
         bool[] memory results = new bool[](_nonces.length);
 
         for (uint256 i = 0; i < _nonces.length; i++) {
