@@ -1,0 +1,501 @@
+{
+  "manifestVersion": "3.2",
+  "proxies": [
+    {
+      "address": "0xFA147E4BB5abFD3698c5f69fA4bB4491E2e0bc97",
+      "txHash": "0xb7b75eaa2e8e293c06d0568932fbeeed6e717e241f7499c617a37fb45a533e89",
+      "kind": "uups"
+    },
+    {
+      "address": "0x47c76771fB6ea832Ddc040513b5769199F779a0d",
+      "txHash": "0x09b1ec5db8b1d87554bdfb191ae1c47b58478675e8c730900de05ad693942081",
+      "kind": "uups"
+    }
+  ],
+  "impls": {
+    "221a11b3417916786f74330cafff9b5bb7a185f7e742b6406072990b5ef71ba3": {
+      "address": "0xbdcA226FE34fdE25Ba1ab5A3C3702B8350Dc2803",
+      "txHash": "0x576af95d95885aa76ea32794854daa8b232e694ee61c65e55531673498b65811",
+      "layout": {
+        "solcVersion": "0.8.23",
+        "storage": [
+          {
+            "label": "globalSlotLimit",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint256",
+            "contract": "SlotManager",
+            "src": "contracts/SlotManager.sol:18"
+          },
+          {
+            "label": "allowUpgrade",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_bool",
+            "contract": "SlotManager",
+            "src": "contracts/SlotManager.sol:20"
+          },
+          {
+            "label": "slotLimits",
+            "offset": 0,
+            "slot": "2",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "SlotManager",
+            "src": "contracts/SlotManager.sol:22"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_struct(AccessManagedStorage)26_storage": {
+            "label": "struct AccessManagedUpgradeable.AccessManagedStorage",
+            "members": [
+              {
+                "label": "_authority",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_consumingSchedule",
+                "type": "t_bool",
+                "offset": 20,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(InitializableStorage)68_storage": {
+            "label": "struct Initializable.InitializableStorage",
+            "members": [
+              {
+                "label": "_initialized",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_initializing",
+                "type": "t_bool",
+                "offset": 8,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          },
+          "t_mapping(t_address,t_uint256)": {
+            "label": "mapping(address => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          }
+        },
+        "namespaces": {
+          "erc7201:openzeppelin.storage.AccessManaged": [
+            {
+              "contract": "AccessManagedUpgradeable",
+              "label": "_authority",
+              "type": "t_address",
+              "src": "@openzeppelin/contracts-upgradeable/access/manager/AccessManagedUpgradeable.sol:24",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "AccessManagedUpgradeable",
+              "label": "_consumingSchedule",
+              "type": "t_bool",
+              "src": "@openzeppelin/contracts-upgradeable/access/manager/AccessManagedUpgradeable.sol:26",
+              "offset": 20,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Initializable": [
+            {
+              "contract": "Initializable",
+              "label": "_initialized",
+              "type": "t_uint64",
+              "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:69",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "Initializable",
+              "label": "_initializing",
+              "type": "t_bool",
+              "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:73",
+              "offset": 8,
+              "slot": "0"
+            }
+          ]
+        }
+      }
+    },
+    "1423181e104a20dec896cbb0e9fb09ca78588af69142d39602da493b9839b0ca": {
+      "address": "0x756d1EA4E1A342b6aBBC833D3785c7412B91E22E",
+      "txHash": "0x718ad73d4e918adafd5f0ef028b065ac695e7de6a36da1f94f516fd35d16bd38",
+      "layout": {
+        "solcVersion": "0.8.23",
+        "storage": [
+          {
+            "label": "poolDurations",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_mapping(t_uint256,t_struct(UintSet)6838_storage)",
+            "contract": "BetContract",
+            "src": "contracts/BetContract.sol:54"
+          },
+          {
+            "label": "poolSettlementPeriods",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_mapping(t_uint256,t_struct(UintSet)6838_storage)",
+            "contract": "BetContract",
+            "src": "contracts/BetContract.sol:55"
+          },
+          {
+            "label": "pools",
+            "offset": 0,
+            "slot": "2",
+            "type": "t_array(t_struct(Pool)7283_storage)dyn_storage",
+            "contract": "BetContract",
+            "src": "contracts/BetContract.sol:57"
+          },
+          {
+            "label": "bets",
+            "offset": 0,
+            "slot": "3",
+            "type": "t_array(t_struct(BetInfo)7317_storage)dyn_storage",
+            "contract": "BetContract",
+            "src": "contracts/BetContract.sol:59"
+          },
+          {
+            "label": "nativeFee",
+            "offset": 0,
+            "slot": "4",
+            "type": "t_uint256",
+            "contract": "BetContract",
+            "src": "contracts/BetContract.sol:61"
+          },
+          {
+            "label": "slotManager",
+            "offset": 0,
+            "slot": "5",
+            "type": "t_contract(SlotManager)9440",
+            "contract": "BetContract",
+            "src": "contracts/BetContract.sol:63"
+          },
+          {
+            "label": "gelatoAutomate",
+            "offset": 0,
+            "slot": "6",
+            "type": "t_contract(IAutomate)9502",
+            "contract": "BetContract",
+            "src": "contracts/BetContract.sol:65"
+          },
+          {
+            "label": "gelatoDedicatedMsgSender",
+            "offset": 0,
+            "slot": "7",
+            "type": "t_address",
+            "contract": "BetContract",
+            "src": "contracts/BetContract.sol:67"
+          },
+          {
+            "label": "gelatoFeeCollector",
+            "offset": 0,
+            "slot": "8",
+            "type": "t_address_payable",
+            "contract": "BetContract",
+            "src": "contracts/BetContract.sol:69"
+          },
+          {
+            "label": "allowUpgrade",
+            "offset": 20,
+            "slot": "8",
+            "type": "t_bool",
+            "contract": "BetContract",
+            "src": "contracts/BetContract.sol:71"
+          },
+          {
+            "label": "userBetCount",
+            "offset": 0,
+            "slot": "9",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "BetContract",
+            "src": "contracts/BetContract.sol:74"
+          },
+          {
+            "label": "userCounted",
+            "offset": 0,
+            "slot": "10",
+            "type": "t_mapping(t_address,t_bool)",
+            "contract": "BetContract",
+            "src": "contracts/BetContract.sol:75"
+          },
+          {
+            "label": "userCount",
+            "offset": 0,
+            "slot": "11",
+            "type": "t_uint256",
+            "contract": "BetContract",
+            "src": "contracts/BetContract.sol:77"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_struct(AccessManagedStorage)26_storage": {
+            "label": "struct AccessManagedUpgradeable.AccessManagedStorage",
+            "members": [
+              {
+                "label": "_authority",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_consumingSchedule",
+                "type": "t_bool",
+                "offset": 20,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(InitializableStorage)68_storage": {
+            "label": "struct Initializable.InitializableStorage",
+            "members": [
+              {
+                "label": "_initialized",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_initializing",
+                "type": "t_bool",
+                "offset": 8,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          },
+          "t_address_payable": {
+            "label": "address payable",
+            "numberOfBytes": "20"
+          },
+          "t_array(t_bytes32)dyn_storage": {
+            "label": "bytes32[]",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_struct(BetInfo)7317_storage)dyn_storage": {
+            "label": "struct BetContract.BetInfo[]",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_struct(Pool)7283_storage)dyn_storage": {
+            "label": "struct BetContract.Pool[]",
+            "numberOfBytes": "32"
+          },
+          "t_bytes32": {
+            "label": "bytes32",
+            "numberOfBytes": "32"
+          },
+          "t_contract(IAutomate)9502": {
+            "label": "contract IAutomate",
+            "numberOfBytes": "20"
+          },
+          "t_contract(SlotManager)9440": {
+            "label": "contract SlotManager",
+            "numberOfBytes": "20"
+          },
+          "t_mapping(t_address,t_bool)": {
+            "label": "mapping(address => bool)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_uint256)": {
+            "label": "mapping(address => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_bytes32,t_uint256)": {
+            "label": "mapping(bytes32 => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(UintSet)6838_storage)": {
+            "label": "mapping(uint256 => struct EnumerableSet.UintSet)",
+            "numberOfBytes": "32"
+          },
+          "t_string_storage": {
+            "label": "string",
+            "numberOfBytes": "32"
+          },
+          "t_struct(BetInfo)7317_storage": {
+            "label": "struct BetContract.BetInfo",
+            "members": [
+              {
+                "label": "bidder",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "poolId",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "bidPrice",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "resultPrice",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "bidStartTimestamp",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "bidEndTimestamp",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "bidSettleTimestamp",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "6"
+              }
+            ],
+            "numberOfBytes": "224"
+          },
+          "t_struct(Pool)7283_storage": {
+            "label": "struct BetContract.Pool",
+            "members": [
+              {
+                "label": "active",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "name",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "oracleAddress",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "2"
+              }
+            ],
+            "numberOfBytes": "96"
+          },
+          "t_struct(Set)6366_storage": {
+            "label": "struct EnumerableSet.Set",
+            "members": [
+              {
+                "label": "_values",
+                "type": "t_array(t_bytes32)dyn_storage",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_positions",
+                "type": "t_mapping(t_bytes32,t_uint256)",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_struct(UintSet)6838_storage": {
+            "label": "struct EnumerableSet.UintSet",
+            "members": [
+              {
+                "label": "_inner",
+                "type": "t_struct(Set)6366_storage",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          }
+        },
+        "namespaces": {
+          "erc7201:openzeppelin.storage.AccessManaged": [
+            {
+              "contract": "AccessManagedUpgradeable",
+              "label": "_authority",
+              "type": "t_address",
+              "src": "@openzeppelin/contracts-upgradeable/access/manager/AccessManagedUpgradeable.sol:24",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "AccessManagedUpgradeable",
+              "label": "_consumingSchedule",
+              "type": "t_bool",
+              "src": "@openzeppelin/contracts-upgradeable/access/manager/AccessManagedUpgradeable.sol:26",
+              "offset": 20,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Initializable": [
+            {
+              "contract": "Initializable",
+              "label": "_initialized",
+              "type": "t_uint64",
+              "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:69",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "Initializable",
+              "label": "_initializing",
+              "type": "t_bool",
+              "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:73",
+              "offset": 8,
+              "slot": "0"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
