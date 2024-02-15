@@ -39,7 +39,7 @@ describe('NicknameRegistry', () => {
 
         const NicknameRegistry = (await ethers.getContractFactory('NicknameRegistry')) as NicknameRegistry__factory;
         nicknameRegistry = await upgrades.deployProxy(NicknameRegistry, [
-            manager.target, fundingWallet.address, nicknameFee
+            manager.target, fundingWallet.address, busdMock.target, nicknameFee
         ]) as unknown as NicknameRegistry;
     
         await nicknameRegistry.waitForDeployment();
@@ -53,20 +53,29 @@ describe('NicknameRegistry', () => {
 
             const nativeFee = await nicknameRegistry.nicknameFee();
             expect(nativeFee).to.equal(nicknameFee);
+
+            const fundingWalletAddress = await nicknameRegistry.fundingWallet();
+            expect(fundingWalletAddress).to.equal(fundingWallet.address);
+
+            const feeTokenAddress = await nicknameRegistry.feeTokenAddress();
+            expect(feeTokenAddress).to.equal(busdMock.target);
         });
     });
 
     describe('setNicknameFee', async () => {
-        it('should set nickname fee', async () => {
+        it('should set nickname fee and token address successfully', async () => {
             /* SETUP */
             const newFee = 100;
 
             /* EXECUTE */
-            await nicknameRegistry.connect(admin).setNicknameFee(newFee);
+            await nicknameRegistry.connect(admin).setNicknameFee(newFee, ZeroAddress);
 
             /* ASSERT */
             const fee = await nicknameRegistry.nicknameFee();
             expect(fee).to.equal(newFee);
+
+            const feeTokenAddress = await nicknameRegistry.feeTokenAddress();
+            expect(feeTokenAddress).to.equal(ZeroAddress);
         });
 
         it('rejects if not admin role', async () => {
@@ -74,36 +83,7 @@ describe('NicknameRegistry', () => {
             const newFee = 100;
 
             /* EXECUTE */
-            const promise = nicknameRegistry.connect(addr1).setNicknameFee(newFee);
-
-            /* ASSERT */
-            await expect(promise).to.be.revertedWithCustomError(
-                nicknameRegistry, 'AccessManagedUnauthorized'
-            ).withArgs(addr1.address);
-        });
-    });
-
-    describe('setTokenPaymentAmount', async () => {
-        it('should set token payment amount', async () => {
-            /* SETUP */
-            const tokenAddress = ZeroAddress;
-            const paymentAmount = ethers.parseUnits('1', 18);
-
-            /* EXECUTE */
-            await nicknameRegistry.connect(admin).setTokenPaymentAmount(tokenAddress, paymentAmount);
-
-            /* ASSERT */
-            const amount = await nicknameRegistry.tokenPaymentAmounts(tokenAddress);
-            expect(amount).to.equal(paymentAmount);
-        });
-
-        it('rejects if not admin role', async () => {
-            /* SETUP */
-            const tokenAddress = busdMock.target;
-            const paymentAmount = ethers.parseUnits('1', 18);
-
-            /* EXECUTE */
-            const promise = nicknameRegistry.connect(addr1).setTokenPaymentAmount(tokenAddress, paymentAmount);
+            const promise = nicknameRegistry.connect(addr1).setNicknameFee(newFee, ZeroAddress);
 
             /* ASSERT */
             await expect(promise).to.be.revertedWithCustomError(
@@ -153,20 +133,18 @@ describe('NicknameRegistry', () => {
             /* SETUP */
             const account = addr1.address;
             const nickname = 'testNick';
-
-            const addr1BalanceBefore = await ethers.provider.getBalance(account);
             const tokenAddress = ZeroAddress;
             const paymentAmount = ethers.parseUnits('1', 18);
 
-            await nicknameRegistry.connect(admin).setTokenPaymentAmount(tokenAddress, paymentAmount);
+            const addr1BalanceBefore = await ethers.provider.getBalance(account);
+
+            await nicknameRegistry.connect(admin).setNicknameFee(paymentAmount, tokenAddress);
 
             const nicknameFee = await nicknameRegistry.nicknameFee();
-
-            const amount = await nicknameRegistry.tokenPaymentAmounts(tokenAddress);
-            const nicknameFeeAmount = nicknameFee * amount;
+            const nicknameFeeAmount = nicknameFee;
 
             /* EXECUTE */
-            const tx = await nicknameRegistry.connect(addr1).createNickname(nickname, tokenAddress, { value: nicknameFeeAmount });
+            const tx = await nicknameRegistry.connect(addr1).createNickname(nickname, { value: nicknameFeeAmount });
 
             /* ASSERT */
             const minedTx = await tx.wait();
@@ -182,7 +160,7 @@ describe('NicknameRegistry', () => {
             expect(account).to.equal(nicknameAddr1);
 
             await expect(tx).to.emit(nicknameRegistry, 'NicknameCreated')
-                .withArgs(account, nickname);
+                .withArgs(account, nickname, tokenAddress, paymentAmount);
         });
 
         it('should create a nickname with ERC20 token', async () => {
@@ -198,15 +176,12 @@ describe('NicknameRegistry', () => {
 
             const addr1BalanceBefore = await busdMock.balanceOf(account);
 
-            await nicknameRegistry.connect(admin).setTokenPaymentAmount(tokenAddress, paymentAmount);
+            await nicknameRegistry.connect(admin).setNicknameFee(paymentAmount, tokenAddress);
 
-            const nicknameFee = await nicknameRegistry.nicknameFee();
-
-            const amount = await nicknameRegistry.tokenPaymentAmounts(tokenAddress);
-            const nicknameFeeAmount = nicknameFee * amount;
+            const nicknameFeeAmount = await nicknameRegistry.nicknameFee();
 
             /* EXECUTE */
-            const tx = await nicknameRegistry.connect(addr1).createNickname(nickname, tokenAddress);
+            const tx = await nicknameRegistry.connect(addr1).createNickname(nickname);
 
             /* ASSERT */
             const addr1BalanceAfter = await busdMock.balanceOf(account);
@@ -220,7 +195,7 @@ describe('NicknameRegistry', () => {
             expect(account).to.equal(nicknameAddr1);
 
             await expect(tx).to.emit(nicknameRegistry, 'NicknameCreated')
-                .withArgs(account, nickname);
+                .withArgs(account, nickname, tokenAddress, paymentAmount);
         });
 
         it('should create a nickname free of charge', async () => {
@@ -230,18 +205,14 @@ describe('NicknameRegistry', () => {
 
             const addr1BalanceBefore = await ethers.provider.getBalance(account);
             const tokenAddress = ZeroAddress;
-            const paymentAmount = ethers.parseUnits('1', 18);
+            const paymentAmount = 0;
 
-            await nicknameRegistry.connect(admin).setNicknameFee(0);
-            await nicknameRegistry.connect(admin).setTokenPaymentAmount(tokenAddress, paymentAmount);
+            await nicknameRegistry.connect(admin).setNicknameFee(paymentAmount, tokenAddress);
 
-            const nicknameFee = await nicknameRegistry.nicknameFee();
-
-            const amount = await nicknameRegistry.tokenPaymentAmounts(tokenAddress);
-            const nicknameFeeAmount = nicknameFee * amount;
+            const nicknameFeeAmount = await nicknameRegistry.nicknameFee();
 
             /* EXECUTE */
-            const tx = await nicknameRegistry.connect(addr1).createNickname(nickname, tokenAddress, { value: nicknameFeeAmount });
+            const tx = await nicknameRegistry.connect(addr1).createNickname(nickname, { value: nicknameFeeAmount });
 
             /* ASSERT */
             const minedTx = await tx.wait();
@@ -257,26 +228,7 @@ describe('NicknameRegistry', () => {
             expect(account).to.equal(nicknameAddr1);
 
             await expect(tx).to.emit(nicknameRegistry, 'NicknameCreated')
-                .withArgs(account, nickname);
-        });
-
-        it('should revert if unsupported payment token', async () => {
-            /* SETUP */
-            const account = addr1.address;
-            const nickname = 'testNick';
-
-            const tokenAddress = busdMock.target;
-            const paymentAmount = ethers.parseUnits('1', 18);
-
-            await busdMock.connect(addr1).mint(account, paymentAmount);
-            await busdMock.connect(addr1).approve(nicknameRegistry.target, paymentAmount);
-
-            /* EXECUTE */
-            const promise = nicknameRegistry.connect(addr1).createNickname(nickname, tokenAddress);
-
-            await expect(promise).to.be.revertedWithCustomError(
-                nicknameRegistry, 'UnsupportedPaymentToken'
-            );
+                .withArgs(account, nickname, ZeroAddress, paymentAmount);
         });
 
         it('should revert if incorrect fee amount with native currency', async () => {
@@ -286,15 +238,13 @@ describe('NicknameRegistry', () => {
             const tokenAddress = ZeroAddress;
             const paymentAmount = ethers.parseUnits('1', 18);
 
-            await nicknameRegistry.connect(admin).setTokenPaymentAmount(tokenAddress, paymentAmount);
+            await nicknameRegistry.connect(admin).setNicknameFee(paymentAmount, tokenAddress);
 
             const nicknameFee = await nicknameRegistry.nicknameFee();
-
-            const amount = await nicknameRegistry.tokenPaymentAmounts(tokenAddress);
-            const nicknameFeeAmount = (nicknameFee * amount) - 1n;
+            const nicknameFeeAmount = nicknameFee - 1n;
 
             /* EXECUTE */
-            const promise = nicknameRegistry.connect(addr1).createNickname(nickname, tokenAddress, { value: nicknameFeeAmount });
+            const promise = nicknameRegistry.connect(addr1).createNickname(nickname, { value: nicknameFeeAmount });
 
             /* ASSERT */
             await expect(promise).to.be.revertedWithCustomError(
@@ -313,10 +263,10 @@ describe('NicknameRegistry', () => {
             await busdMock.connect(addr1).mint(account, paymentAmount - 1n);
             await busdMock.connect(addr1).approve(nicknameRegistry.target, paymentAmount);
 
-            await nicknameRegistry.connect(admin).setTokenPaymentAmount(tokenAddress, paymentAmount);
+            await nicknameRegistry.connect(admin).setNicknameFee(paymentAmount, tokenAddress);
 
             /* EXECUTE */
-            const promise = nicknameRegistry.connect(addr1).createNickname(nickname, tokenAddress);
+            const promise = nicknameRegistry.connect(addr1).createNickname(nickname);
 
             /* ASSERT */
             await expect(promise).to.be.revertedWithCustomError(
@@ -332,17 +282,14 @@ describe('NicknameRegistry', () => {
             const tokenAddress = ZeroAddress;
             const paymentAmount = ethers.parseUnits('1', 18);
 
-            await nicknameRegistry.connect(admin).setTokenPaymentAmount(tokenAddress, paymentAmount);
+            await nicknameRegistry.connect(admin).setNicknameFee(paymentAmount, tokenAddress);
 
-            const nicknameFee = await nicknameRegistry.nicknameFee();
+            const nicknameFeeAmount = await nicknameRegistry.nicknameFee();
 
-            const amount = await nicknameRegistry.tokenPaymentAmounts(tokenAddress);
-            const nicknameFeeAmount = nicknameFee * amount;
-
-            await nicknameRegistry.connect(addr1).createNickname(nickname, tokenAddress, { value: nicknameFeeAmount });
+            await nicknameRegistry.connect(addr1).createNickname(nickname, { value: nicknameFeeAmount });
 
             /* EXECUTE */
-            const promise = nicknameRegistry.connect(addr2).createNickname(nickname, tokenAddress, { value: nicknameFeeAmount });
+            const promise = nicknameRegistry.connect(addr2).createNickname(nickname, { value: nicknameFeeAmount });
 
             /* ASSERT */
             await expect(promise).to.be.revertedWithCustomError(
@@ -356,17 +303,14 @@ describe('NicknameRegistry', () => {
             const tokenAddress = ZeroAddress;
             const paymentAmount = ethers.parseUnits('1', 18);
 
-            await nicknameRegistry.connect(admin).setTokenPaymentAmount(tokenAddress, paymentAmount);
+            await nicknameRegistry.connect(admin).setNicknameFee(paymentAmount, tokenAddress);
 
-            const nicknameFee = await nicknameRegistry.nicknameFee();
+            const nicknameFeeAmount = await nicknameRegistry.nicknameFee();
 
-            const amount = await nicknameRegistry.tokenPaymentAmounts(tokenAddress);
-            const nicknameFeeAmount = nicknameFee * amount;
-
-            await nicknameRegistry.connect(addr1).createNickname(nickname1, tokenAddress, { value: nicknameFeeAmount });
+            await nicknameRegistry.connect(addr1).createNickname(nickname1, { value: nicknameFeeAmount });
 
             /* EXECUTE */
-            const promise = nicknameRegistry.connect(addr1).createNickname(nickname2, tokenAddress, { value: nicknameFeeAmount });
+            const promise = nicknameRegistry.connect(addr1).createNickname(nickname2, { value: nicknameFeeAmount });
 
             /* ASSERT */
             await expect(promise).to.be.revertedWithCustomError(
@@ -384,14 +328,11 @@ describe('NicknameRegistry', () => {
             const tokenAddress = ZeroAddress;
             const paymentAmount = ethers.parseUnits('1', 18);
 
-            await nicknameRegistry.connect(admin).setTokenPaymentAmount(tokenAddress, paymentAmount);
+            await nicknameRegistry.connect(admin).setNicknameFee(paymentAmount, tokenAddress);
 
-            const nicknameFee = await nicknameRegistry.nicknameFee();
+            const nicknameFeeAmount = await nicknameRegistry.nicknameFee();
 
-            const amount = await nicknameRegistry.tokenPaymentAmounts(tokenAddress);
-            const nicknameFeeAmount = nicknameFee * amount;
-
-            await nicknameRegistry.connect(addr1).createNickname(nickname, tokenAddress, { value: nicknameFeeAmount });
+            await nicknameRegistry.connect(addr1).createNickname(nickname, { value: nicknameFeeAmount });
 
             /* EXECUTE */
             const addr1Address = await nicknameRegistry.connect(admin).getAddressByNickname(nickname);
@@ -409,14 +350,11 @@ describe('NicknameRegistry', () => {
             const tokenAddress = ZeroAddress;
             const paymentAmount = ethers.parseUnits('1', 18);
 
-            await nicknameRegistry.connect(admin).setTokenPaymentAmount(tokenAddress, paymentAmount);
+            await nicknameRegistry.connect(admin).setNicknameFee(paymentAmount, tokenAddress);
 
-            const nicknameFee = await nicknameRegistry.nicknameFee();
+            const nicknameFeeAmount = await nicknameRegistry.nicknameFee();
 
-            const amount = await nicknameRegistry.tokenPaymentAmounts(tokenAddress);
-            const nicknameFeeAmount = nicknameFee * amount;
-
-            await nicknameRegistry.connect(addr1).createNickname(nickname, tokenAddress, { value: nicknameFeeAmount });
+            await nicknameRegistry.connect(addr1).createNickname(nickname, { value: nicknameFeeAmount });
 
             /* EXECUTE */
             const addr1Nickname = await nicknameRegistry.connect(admin).getNicknameByAddress(account);

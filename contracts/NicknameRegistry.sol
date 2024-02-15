@@ -35,6 +35,7 @@ contract NicknameRegistry is
      * @notice Initializes the contract.
      * @param initialAuthority_ The authority that manages this contract.
      * @param fundingWallet_ The address of the funding wallet.
+     * @param feeToken_ The token address to be used for the fee.
      * @param fee_ The fee amount for creating a nickname.
      */
     function initialize(
@@ -54,7 +55,7 @@ contract NicknameRegistry is
     /**
      * @notice Sets the fee required for creating a nickname.
      * @param _fee The new fee amount.
-     * @param _feeToken Token address to be paid (zero address for native ETH/MATIC/...)
+     * @param _feeToken Token address to be paid (zero address for native ETH/MATIC/...).
      */
     function setNicknameFee(
         uint256 _fee,

@@ -16,7 +16,6 @@ contract IdaoErrors {
     error PriceAlreadyFilled();
     error OraclePriceIsZero();
     error NotInitialized();
-    error UnsupportedPaymentToken();
     error IncorrectFeeAmount();
     error NicknameIsAlreadyTaken();
     error AddressAlreadyHasNickname(string nickname);
