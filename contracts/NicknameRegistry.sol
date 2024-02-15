@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.23;
+pragma solidity ^0.8.19;
 
 import "@openzeppelin/contracts-upgradeable/access/manager/AccessManagedUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -16,15 +16,20 @@ contract NicknameRegistry is
 {
     using Address for address payable;
 
-    address public fundingWallet;
     uint256 public nicknameFee;
+    address public fundingWallet;
     bool private allowUpgrade;
+    address public feeTokenAddress;
 
-    mapping(address => uint256) public tokenPaymentAmounts;
     mapping(bytes32 => address) private nicknameToAddress;
     mapping(address => string) private addressToNickname;
 
-    event NicknameCreated(address indexed account, string nickname);
+    event NicknameCreated(
+        address indexed account,
+        string nickname,
+        address feeToken,
+        uint256 feeAmount
+    );
 
     /**
      * @notice Initializes the contract.
@@ -35,6 +40,7 @@ contract NicknameRegistry is
     function initialize(
         address initialAuthority_,
         address fundingWallet_,
+        address feeToken_,
         uint256 fee_
     ) external initializer {
         __AccessManaged_init(initialAuthority_);
@@ -42,26 +48,17 @@ contract NicknameRegistry is
 
         fundingWallet = fundingWallet_;
         nicknameFee = fee_;
+        feeTokenAddress = feeToken_;
     }
 
     /**
      * @notice Sets the fee required for creating a nickname.
      * @param _fee The new fee amount.
+     * @param _feeToken Token address to be paid (zero address for native ETH/MATIC/...)
      */
-    function setNicknameFee(uint256 _fee) external restricted {
+    function setNicknameFee(uint256 _fee, address _feeToken) external restricted {
         nicknameFee = _fee;
-    }
-
-    /**
-     * @notice Sets the payment amount for a token.
-     * @param _tokenContractAddress The address of the token contract.
-     * @param _paymentAmount The payment amount for the token.
-     */
-    function setTokenPaymentAmount(
-        address _tokenContractAddress,
-        uint256 _paymentAmount
-    ) external restricted {
-        tokenPaymentAmounts[_tokenContractAddress] = _paymentAmount;
+        feeTokenAddress = _feeToken;
     }
 
     /**
@@ -78,14 +75,10 @@ contract NicknameRegistry is
     /**
      * @notice Creates a nickname for the sender's address.
      * @param _nickname The desired nickname.
-     * @param _paymentToken The payment amount for the token.
      */
-    function createNickname(
-        string memory _nickname,
-        address _paymentToken
-    ) external payable {
+    function createNickname(string memory _nickname) external payable {
         if (nicknameFee != 0) {
-            transferFee(_paymentToken, nicknameFee);
+            transferFee();
         }
 
         bytes32 nicknameHash = keccak256(abi.encodePacked(_nickname));
@@ -143,18 +136,8 @@ contract NicknameRegistry is
 
     /**
      * @dev Transfers the calculated fee from the user to the funding wallet.
-     * @param _paymentToken The address of the token used for the fee.
-     * @param _nicknameFee The fee amount to be transferred.
      */
-    function transferFee(address _paymentToken, uint256 _nicknameFee) private {
-        uint256 paymentAmount = tokenPaymentAmounts[_paymentToken];
-
-        if (paymentAmount == 0) {
-            revert UnsupportedPaymentToken();
-        }
-
-        uint256 fee = paymentAmount * _nicknameFee;
-
+    function transferFee() private {
         if (_paymentToken == address(0)) {
             if (msg.value != fee) {
                 revert IncorrectFeeAmount();
