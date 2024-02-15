@@ -79,10 +79,10 @@ contract RegisterPoints is
         return userPoints[_user];
     }
 
-/**
- * @notice Checks if multiple nonces have been used.
- * @param _nonces An array of nonces to check.
- */
+    /**
+     * @notice Checks if multiple nonces have been used.
+     * @param _nonces An array of nonces to check.
+     */
     function batchIsNonceUsed(
         uint256[] calldata _nonces
     ) external view returns (bool[] memory) {

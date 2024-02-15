@@ -56,7 +56,10 @@ contract NicknameRegistry is
      * @param _fee The new fee amount.
      * @param _feeToken Token address to be paid (zero address for native ETH/MATIC/...)
      */
-    function setNicknameFee(uint256 _fee, address _feeToken) external restricted {
+    function setNicknameFee(
+        uint256 _fee,
+        address _feeToken
+    ) external restricted {
         nicknameFee = _fee;
         feeTokenAddress = _feeToken;
     }
@@ -92,7 +95,12 @@ contract NicknameRegistry is
         nicknameToAddress[nicknameHash] = msg.sender;
         addressToNickname[msg.sender] = _nickname;
 
-        emit NicknameCreated(msg.sender, _nickname);
+        emit NicknameCreated(
+            msg.sender,
+            _nickname,
+            feeTokenAddress,
+            nicknameFee
+        );
     }
 
     /**
@@ -138,13 +146,18 @@ contract NicknameRegistry is
      * @dev Transfers the calculated fee from the user to the funding wallet.
      */
     function transferFee() private {
-        if (_paymentToken == address(0)) {
+        uint256 fee = nicknameFee;
+        if (feeTokenAddress == address(0)) {
             if (msg.value != fee) {
                 revert IncorrectFeeAmount();
             }
             payable(fundingWallet).sendValue(msg.value);
         } else {
-            IERC20(_paymentToken).transferFrom(msg.sender, fundingWallet, fee);
+            IERC20(feeTokenAddress).transferFrom(
+                msg.sender,
+                fundingWallet,
+                fee
+            );
         }
     }
 }
