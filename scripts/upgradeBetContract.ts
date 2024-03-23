@@ -25,6 +25,8 @@ async function main() {
 
     console.log("BetContract upgraded to impl:", implAddress);
 
+    await new Promise(resolve => setTimeout(resolve, 10000));
+
     await hre.run("verify:verify", {
         address: implAddress,
         constructorArguments: [],
