@@ -76,6 +76,9 @@ contract BetContract is
 
     uint256 public userCount;
 
+    // TODO: Remove this mapping and store value in BetInfo struct
+    mapping(uint256 => uint256) private betIdToPriceAtBid;
+
     event PoolCreated(
         uint256 indexed poolId,
         bool active,
@@ -214,10 +217,12 @@ contract BetContract is
             _createGelatoTask(data, betId);
         }
 
-        (uint256 price, ) = IDataSource(pools[_poolId].oracleAddress)
+        userBetCount[msg.sender]++;
+
+        (uint256 priceAtBid, ) = IDataSource(pools[_poolId].oracleAddress)
             .getLatestPrice();
 
-        userBetCount[msg.sender]++;
+        betIdToPriceAtBid[betId] = priceAtBid;
 
         emit BetPlaced(
             betId,
@@ -228,7 +233,7 @@ contract BetContract is
             _duration,
             bidEndTimestamp,
             settlementPeriod,
-            price
+            priceAtBid
         );
     }
 
@@ -504,7 +509,8 @@ contract BetContract is
             uint256 resultPrice,
             uint256 bidStartTimestamp,
             uint256 bidEndTimestamp,
-            uint256 bidSettleTimestamp
+            uint256 bidSettleTimestamp,
+            uint256 priceAtBid
         )
     {
         if (_betId >= bets.length) {
@@ -520,7 +526,8 @@ contract BetContract is
             userBet.resultPrice,
             userBet.bidStartTimestamp,
             userBet.bidEndTimestamp,
-            userBet.bidSettleTimestamp
+            userBet.bidSettleTimestamp,
+            betIdToPriceAtBid[_betId]
         );
     }
 
