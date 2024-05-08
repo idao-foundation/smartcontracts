@@ -4,6 +4,8 @@ import { delay } from "./tools/timing";
 import { ethers } from "ethers";
 import * as dotenv from "dotenv";
 import { BetContract__factory } from "../typechain-types";
+import { logToDiscord } from "./tools/discordLogging";
+
 dotenv.config();
 
 const nodeUrl = process.env.SEPOLIA_URL;
@@ -19,27 +21,31 @@ async function botLoop() {
     const betContract = new ethers.Contract(contractAddress, BetContract__factory.abi, signer);
 
     let currentNonce = await signer.getNonce();
-    log(`Account address: ${signer.address}`)
-    log(`Account nonce: ${currentNonce}`);
+    await logToDiscord(`Account address: ${signer.address}`)
+    await logToDiscord(`Account nonce: ${currentNonce}`);
+    await logToDiscord(`Contract address: ${contractAddress}`);
+    await logToDiscord(`Gas price factor: ${gasPricePct}%`);
+    await logToDiscord(`Gas limit factor: ${gasPct}%`);
+    await logToDiscord(`Connected to chainId: ${(await provider.getNetwork()).chainId}`);
 
-    log("Started BetPlaced event listener");
+    await logToDiscord("Started BetPlaced event listener");
     increasePrepend();
     const eventType = betContract.filters["BetPlaced(uint256,uint256,address,uint256,uint256,uint256,uint256,uint256,uint256)"];
     const listener = await betContract.on(
         eventType,
         async function (betId, poolId, bidder, bidPrice, predictionPrice, duration, bidEndTimestamp, settlementPeriod, priceAtBid) {
 
-            log(`Received bet id ${betId} with duration ${duration}`);
+            await logToDiscord(`Received bet id ${betId} with duration ${duration}`);
 
             const delayDuration = Number(duration - 15n);
-            log(`${betId}: Waiting for ${delayDuration} seconds`);
+            await logToDiscord(`${betId}: Waiting for ${delayDuration} seconds`);
             await delay(delayDuration);
 
-            log(`${betId}: checking for fillPrice availability`)
+            await logToDiscord(`${betId}: checking for fillPrice availability`)
             while (true) {
                 try {
                     await betContract.fillPrice.staticCall(betId);
-                    log(`${betId}: fillPrice is executable`);
+                    await logToDiscord(`${betId}: fillPrice is executable`);
                     break;
                 } catch {
                     continue;
@@ -48,22 +54,22 @@ async function botLoop() {
 
             const estimateGas = await betContract.fillPrice.estimateGas(betId);
             const gasLimit = (estimateGas * BigInt(gasPct)) / 100n
-            log(`${betId}: will use gasLimit ${gasLimit} (estimated ${estimateGas}, factor ${gasPct}%`)
+            await logToDiscord(`${betId}: will use gasLimit ${gasLimit} (estimated ${estimateGas}, factor ${gasPct}%`)
 
             const feeData = await provider.getFeeData();
             const currentGasPrice = feeData.gasPrice!;
             const gasPrice = (currentGasPrice * BigInt(gasPricePct)) / 100n;
-            log(`${betId}: will use gasPrice ${ethers.formatUnits(gasPrice, 9)} (current ${ethers.formatUnits(currentGasPrice, 9)}, factor ${gasPct}%`)
+            await logToDiscord(`${betId}: will use gasPrice ${ethers.formatUnits(gasPrice, 9)} (current ${ethers.formatUnits(currentGasPrice, 9)}, factor ${gasPct}%`)
 
             const nonce = currentNonce;
-            log(`${betId}: will use tx nonce ${nonce}`);
+            await logToDiscord(`${betId}: will use tx nonce ${nonce}`);
             currentNonce++;
 
             const tx = await betContract.fillPrice(betId, {nonce, gasPrice, gasLimit});
-            log(`${betId}: Broadcasted tx: ${tx.hash}`);
+            await logToDiscord(`${betId}: Broadcasted tx: ${tx.hash}`);
 
             await tx.wait();
-            log(`${betId}: price filled`);
+            await logToDiscord(`${betId}: price filled`);
         }
     );
 
@@ -75,16 +81,18 @@ async function botLoop() {
 }
 
 async function main() {
-    log("Price fill bot - process started")
+    await delay(2);
+
+    await logToDiscord("Price fill bot - process started")
     while (true) {
-        log("Bot loop start");
+        await logToDiscord("Bot loop start");
         increasePrepend();
         try {
             await botLoop();
         } catch (err) {
-            error(`Bot loop crashed!\n\n${err}\n\n`)
+            await logToDiscord(`Bot loop crashed!\n\n${err}\n\n`)
             const delaySeconds = 300;
-            warning(`Waiting ${delaySeconds} before restart`);
+            await logToDiscord(`Waiting ${delaySeconds} before restart`);
             await delay(delaySeconds);
         }
     }

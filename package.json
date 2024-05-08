@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@mathieuc/tradingview": "^3.4.2",
+    "discord.js": "^14.15.2",
     "jetty": "^0.2.1"
   }
 }
