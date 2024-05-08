@@ -8,7 +8,7 @@ import { logToDiscord } from "./tools/discordLogging";
 
 dotenv.config();
 
-const nodeUrl = process.env.SEPOLIA_URL;
+const apiKey = process.env.SEPOLIA_ALCEMY_API_KEY;
 const mnemonic = process.env.MNEMONIC as string;
 const accountIndex = 1;
 const contractAddress = "0x2e0C9c8cA221eb03DbCEd4F1FDfAF2b2a7792D5c";
@@ -16,7 +16,7 @@ const gasPct = 150;
 const gasPricePct = 150;
 
 async function botLoop() {
-    const provider = new ethers.JsonRpcProvider(nodeUrl);
+    const provider = new ethers.AlchemyProvider("sepolia", apiKey);
     const signer = ethers.HDNodeWallet.fromPhrase(mnemonic, undefined, `m/44'/60'/0'/0/${accountIndex}`).connect(provider);
     const betContract = new ethers.Contract(contractAddress, BetContract__factory.abi, signer);
 
@@ -68,7 +68,15 @@ async function botLoop() {
             const tx = await betContract.fillPrice(betId, {nonce, gasPrice, gasLimit});
             await logToDiscord(`${betId}: Broadcasted tx: ${tx.hash}`);
 
-            await tx.wait();
+            while (true) {
+                try {
+                    await tx.wait();
+                    break;
+                } catch (err) {
+                    await logToDiscord(`${betId}: tx failed: \n\`\`\`${err}\`\`\``);
+                    await delay(5);
+                }
+            }
             await logToDiscord(`${betId}: price filled`);
         }
     );
