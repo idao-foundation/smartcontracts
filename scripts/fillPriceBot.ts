@@ -71,7 +71,6 @@ async function botLoop() {
     do {
         listenerCount = await listener.listenerCount(eventType);
         await delay(1)
-        console.log(listenerCount);
     } while (listenerCount > 0)
 }
 
