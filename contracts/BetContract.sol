@@ -540,6 +540,25 @@ contract BetContract is
         super.upgradeToAndCall(newImplementation, data);
     }
 
+    function setGelato(address automateAddress_) external restricted {
+        gelatoAutomate = IAutomate(automateAddress_);
+
+        if (automateAddress_ != address(0)) {
+            address proxyModuleAddress = IAutomate(automateAddress_)
+                .taskModuleAddresses(Module.PROXY);
+
+            address opsProxyFactoryAddress = IProxyModule(proxyModuleAddress)
+                .opsProxyFactory();
+
+            (gelatoDedicatedMsgSender, ) = IOpsProxyFactory(
+                opsProxyFactoryAddress
+            ).getProxyOf(address(this));
+
+            IGelato gelato = IGelato(IAutomate(gelatoAutomate).gelato());
+            gelatoFeeCollector = payable(gelato.feeCollector());
+        }
+    }
+
     function _authorizeUpgrade(address) internal override {
         if (!allowUpgrade) {
             // This path may not be reachable
