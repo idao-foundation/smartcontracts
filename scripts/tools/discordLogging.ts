@@ -4,7 +4,16 @@ import * as dotenv from "dotenv";
 dotenv.config();
 
 const token = process.env.DISCORD_KEY;
-const loggingChannelId = process.env.DISCORD_CHANNEL_ID as string;
+let loggingChannelId = process.env.SEPOLIA_DISCORD_CHANNEL_ID as string;
+
+if (process.env.network == "polygon") {
+    loggingChannelId = process.env.POLYGON_DISCORD_CHANNEL_ID as string
+    console.log("Using Polygon setup");
+}
+
+if (process.env.network == "sepolia") {
+    console.log("Using Sepolia defaults");
+}
 
 const client = new Client({
     intents: [

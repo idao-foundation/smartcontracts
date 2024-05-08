@@ -8,15 +8,29 @@ import { logToDiscord } from "./tools/discordLogging";
 
 dotenv.config();
 
-const apiKey = process.env.SEPOLIA_ALCEMY_API_KEY;
-const mnemonic = process.env.MNEMONIC as string;
-const accountIndex = 1;
-const contractAddress = "0x2e0C9c8cA221eb03DbCEd4F1FDfAF2b2a7792D5c";
-const gasPct = 150;
-const gasPricePct = 150;
+let network = 11155111n;
+let apiKey = process.env.SEPOLIA_ALCEMY_API_KEY;
+let mnemonic = process.env.MNEMONIC as string;
+let accountIndex = 1;
+let contractAddress = "0x2e0C9c8cA221eb03DbCEd4F1FDfAF2b2a7792D5c";
+let gasPct = 150;
+let gasPricePct = 150;
+
+if (process.env.network == "polygon") {
+    network = 137n;
+    apiKey = process.env.POLYGON_ALCEMY_API_KEY;
+    contractAddress = "0x47c76771fB6ea832Ddc040513b5769199F779a0d";
+    gasPct = 125;
+    gasPricePct = 125;
+    console.log("Using Polygon setup");
+}
+
+if (process.env.network == "sepolia") {
+    console.log("Using Sepolia defaults");
+}
 
 async function botLoop() {
-    const provider = new ethers.AlchemyProvider("sepolia", apiKey);
+    const provider = new ethers.AlchemyProvider(network, apiKey);
     const signer = ethers.HDNodeWallet.fromPhrase(mnemonic, undefined, `m/44'/60'/0'/0/${accountIndex}`).connect(provider);
     const betContract = new ethers.Contract(contractAddress, BetContract__factory.abi, signer);
 
@@ -62,8 +76,8 @@ async function botLoop() {
             await logToDiscord(`${betId}: will use gasPrice ${ethers.formatUnits(gasPrice, 9)} (current ${ethers.formatUnits(currentGasPrice, 9)}, factor ${gasPct}%`)
 
             const nonce = currentNonce;
-            await logToDiscord(`${betId}: will use tx nonce ${nonce}`);
             currentNonce++;
+            await logToDiscord(`${betId}: will use tx nonce ${nonce}`);
 
             const tx = await betContract.fillPrice(betId, {nonce, gasPrice, gasLimit});
             await logToDiscord(`${betId}: Broadcasted tx: ${tx.hash}`);
