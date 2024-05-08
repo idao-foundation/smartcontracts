@@ -19,7 +19,7 @@ let gasPricePct = 150;
 if (process.env.network == "polygon") {
     network = 137n;
     apiKey = process.env.POLYGON_ALCEMY_API_KEY;
-    contractAddress = "0x47c76771fB6ea832Ddc040513b5769199F779a0d";
+    contractAddress = "0x79aF96Efc55a5162CA9427b28D2B1cFB993C7E02";
     gasPct = 125;
     gasPricePct = 125;
     console.log("Using Polygon setup");

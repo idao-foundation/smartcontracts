@@ -3,12 +3,12 @@ import * as dotenv from "dotenv";
 import { BetContract__factory } from "../typechain-types";
 dotenv.config();
 
-const nodeUrl = process.env.SEPOLIA_URL;
+const nodeUrl = process.env.POLYGON_URL;
 const mnemonic = process.env.MNEMONIC as string;
 const accountIndex = 0;
-const contractAddress = "0x2e0C9c8cA221eb03DbCEd4F1FDfAF2b2a7792D5c";
-const gasPct = 150;
-const gasPricePct = 150;
+const contractAddress = "0x79aF96Efc55a5162CA9427b28D2B1cFB993C7E02";
+const gasPct = 125;
+const gasPricePct = 125;
 
 async function main() {
     const provider = new ethers.JsonRpcProvider(nodeUrl);
@@ -19,7 +19,9 @@ async function main() {
     console.log(`Account address: ${signer.address}`)
     console.log(`Account nonce: ${currentNonce}`);
 
-    let i = 427;
+    // 790 sepolia
+    //
+    let i = 0;
     while (true) {
         const data = await betContract.betInfo.staticCall(i);
 
