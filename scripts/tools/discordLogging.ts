@@ -26,13 +26,13 @@ client.login(token);
 client.on("ready", async () => {
     // const channel = client.channels.cache.get(loggingChannelId) as TextChannel;
     const channel = await client.channels.fetch(loggingChannelId) as TextChannel;
-    channel.send("Bot is ready");
+    await channel.send("Bot is ready");
 });
 
 export async function logToDiscord(message: string) {
     try {
         const channel = await client.channels.fetch(loggingChannelId) as TextChannel;
-        await channel.send(message);
+        await channel.send(message.substring(0, 1999));
     } catch (e) {
         console.log(e);
     }
