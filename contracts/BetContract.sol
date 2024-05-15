@@ -6,6 +6,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "./SlotManager.sol";
 import "./gelato/Types.sol";
 import "./interfaces/IDataSource.sol";
@@ -14,6 +15,7 @@ import "./IdaoErrors.sol";
 contract BetContract is
     Initializable,
     AccessManagedUpgradeable,
+    PausableUpgradeable,
     IdaoErrors,
     UUPSUpgradeable
 {
@@ -127,6 +129,7 @@ contract BetContract is
         uint256 nativeFee_
     ) external initializer {
         __AccessManaged_init(initialAuthority_);
+        __Pausable_init();
         __UUPSUpgradeable_init();
 
         slotManager = slotManager_;
@@ -164,7 +167,7 @@ contract BetContract is
         uint256 _poolId,
         uint256 _predictionPrice,
         uint256 _duration
-    ) external payable {
+    ) external payable whenNotPaused {
         if (_poolId >= pools.length) {
             revert PoolDoesNotExist();
         }
@@ -557,6 +560,14 @@ contract BetContract is
             IGelato gelato = IGelato(IAutomate(gelatoAutomate).gelato());
             gelatoFeeCollector = payable(gelato.feeCollector());
         }
+    }
+
+    function pause() external restricted {
+        _pause();
+    }
+
+    function unpause() external restricted {
+        _unpause();
     }
 
     function _authorizeUpgrade(address) internal override {
