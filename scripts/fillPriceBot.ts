@@ -12,7 +12,7 @@ let network = 11155111n;
 let apiKey = process.env.SEPOLIA_ALCEMY_API_KEY;
 let mnemonic = process.env.MNEMONIC as string;
 let accountIndex = 1;
-let contractAddress = "0xf01242EfB1695C5C12d45F7cc20e421D24eE1ECE";
+let contractAddress = "0x5E945200e9eFF3d4414a4466B5008643dceC7073";
 let gasPct = 150;
 let gasPricePct = 150;
 
