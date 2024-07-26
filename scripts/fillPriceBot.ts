@@ -48,50 +48,55 @@ async function botLoop() {
     const listener = await betContract.on(
         eventType,
         async function (betId, poolId, bidder, bidPrice, predictionPrice, duration, bidEndTimestamp, settlementPeriod, priceAtBid) {
-
-            await logToDiscord(`Received bet id ${betId} with duration ${duration}`);
-
-            const delayDuration = Number(duration - 15n);
-            await logToDiscord(`${betId}: Waiting for ${delayDuration} seconds`);
-            await delay(delayDuration);
-
-            await logToDiscord(`${betId}: checking for fillPrice availability`)
             while (true) {
                 try {
-                    await betContract.fillPrice.staticCall(betId);
-                    await logToDiscord(`${betId}: fillPrice is executable`);
+                    await logToDiscord(`Received bet id ${betId} with duration ${duration}`);
+
+                    const delayDuration = Number(duration - 15n);
+                    await logToDiscord(`${betId}: Waiting for ${delayDuration} seconds`);
+                    await delay(delayDuration);
+
+                    await logToDiscord(`${betId}: checking for fillPrice availability`)
+                    while (true) {
+                        try {
+                            await betContract.fillPrice.staticCall(betId);
+                            await logToDiscord(`${betId}: fillPrice is executable`);
+                            break;
+                        } catch {
+                            continue;
+                        }
+                    }
+
+                    const estimateGas = await betContract.fillPrice.estimateGas(betId);
+                    const gasLimit = (estimateGas * BigInt(gasPct)) / 100n
+                    await logToDiscord(`${betId}: will use gasLimit ${gasLimit} (estimated ${estimateGas}, factor ${gasPct}%`)
+
+                    const feeData = await provider.getFeeData();
+                    const currentGasPrice = feeData.gasPrice!;
+                    const gasPrice = (currentGasPrice * BigInt(gasPricePct)) / 100n;
+                    await logToDiscord(`${betId}: will use gasPrice ${ethers.formatUnits(gasPrice, 9)} (current ${ethers.formatUnits(currentGasPrice, 9)}, factor ${gasPct}%`)
+
+                    const nonce = currentNonce;
+                    currentNonce++;
+                    await logToDiscord(`${betId}: will use tx nonce ${nonce}`);
+
+                    const tx = await betContract.fillPrice(betId, { nonce, gasPrice, gasLimit });
+                    await logToDiscord(`${betId}: Broadcasted tx: ${tx.hash}`);
+
+                    while (true) {
+                        try {
+                            await tx.wait();
+                            break;
+                        } catch (err) {
+                            await logToDiscord(`${betId}: tx failed: \n\`\`\`${err}\`\`\``);
+                            await delay(5);
+                        }
+                    }
+                    await logToDiscord(`${betId}: price filled`);
                     break;
-                } catch {
-                    continue;
-                }
+
+                } catch (err) { }
             }
-
-            const estimateGas = await betContract.fillPrice.estimateGas(betId);
-            const gasLimit = (estimateGas * BigInt(gasPct)) / 100n
-            await logToDiscord(`${betId}: will use gasLimit ${gasLimit} (estimated ${estimateGas}, factor ${gasPct}%`)
-
-            const feeData = await provider.getFeeData();
-            const currentGasPrice = feeData.gasPrice!;
-            const gasPrice = (currentGasPrice * BigInt(gasPricePct)) / 100n;
-            await logToDiscord(`${betId}: will use gasPrice ${ethers.formatUnits(gasPrice, 9)} (current ${ethers.formatUnits(currentGasPrice, 9)}, factor ${gasPct}%`)
-
-            const nonce = currentNonce;
-            currentNonce++;
-            await logToDiscord(`${betId}: will use tx nonce ${nonce}`);
-
-            const tx = await betContract.fillPrice(betId, {nonce, gasPrice, gasLimit});
-            await logToDiscord(`${betId}: Broadcasted tx: ${tx.hash}`);
-
-            while (true) {
-                try {
-                    await tx.wait();
-                    break;
-                } catch (err) {
-                    await logToDiscord(`${betId}: tx failed: \n\`\`\`${err}\`\`\``);
-                    await delay(5);
-                }
-            }
-            await logToDiscord(`${betId}: price filled`);
         }
     );
 
