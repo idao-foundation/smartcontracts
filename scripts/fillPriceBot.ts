@@ -5,11 +5,12 @@ import { ethers } from "ethers";
 import * as dotenv from "dotenv";
 import { BetContract__factory } from "../typechain-types";
 import { logToDiscord } from "./tools/discordLogging";
+import { doWithLock } from "./tools/lock";
 
 dotenv.config();
 
 let network = 11155111n;
-let apiKey = process.env.SEPOLIA_ALCEMY_API_KEY;
+let wssUrl = process.env.SEPOLIA_WSS_URL as string;
 let mnemonic = process.env.MNEMONIC as string;
 let accountIndex = 1;
 let contractAddress = "0x5E945200e9eFF3d4414a4466B5008643dceC7073";
@@ -18,7 +19,7 @@ let gasPricePct = 150;
 
 if (process.env.network == "polygon") {
     network = 137n;
-    apiKey = process.env.POLYGON_ALCEMY_API_KEY;
+    wssUrl = process.env.POLYGON_WSS_URL as string;
     contractAddress = "0xE50Dc56c80C09800f76D788608Ed015bA3a6B83D";
     gasPct = 125;
     gasPricePct = 125;
@@ -30,7 +31,7 @@ if (process.env.network == "sepolia") {
 }
 
 async function botLoop() {
-    const provider = new ethers.AlchemyProvider(network, apiKey);
+    const provider = new ethers.WebSocketProvider(wssUrl, network);
     const signer = ethers.HDNodeWallet.fromPhrase(mnemonic, undefined, `m/44'/60'/0'/0/${accountIndex}`).connect(provider);
     const betContract = new ethers.Contract(contractAddress, BetContract__factory.abi, signer);
 
@@ -76,16 +77,18 @@ async function botLoop() {
                     const gasPrice = (currentGasPrice * BigInt(gasPricePct)) / 100n;
                     await logToDiscord(`${betId}: will use gasPrice ${ethers.formatUnits(gasPrice, 9)} (current ${ethers.formatUnits(currentGasPrice, 9)}, factor ${gasPct}%`)
 
-                    const nonce = currentNonce;
-                    currentNonce++;
-                    await logToDiscord(`${betId}: will use tx nonce ${nonce}`);
+                    let tx: ethers.ContractTransactionResponse | undefined;
+                    await doWithLock(`fillPrice`, async () => {
+                        const nonce = currentNonce;
+                        currentNonce++;
+                        tx = await betContract.fillPrice(betId, { nonce, gasPrice, gasLimit });
+                    });
+                    await logToDiscord(`${betId}: Broadcasted tx: ${tx!.hash}`);
 
-                    const tx = await betContract.fillPrice(betId, { nonce, gasPrice, gasLimit });
-                    await logToDiscord(`${betId}: Broadcasted tx: ${tx.hash}`);
 
                     while (true) {
                         try {
-                            await tx.wait();
+                            await tx!.wait();
                             break;
                         } catch (err) {
                             await logToDiscord(`${betId}: tx failed: \n\`\`\`${err}\`\`\``);
