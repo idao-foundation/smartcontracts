@@ -12,14 +12,14 @@ let network = 11155111n;
 let apiKey = process.env.SEPOLIA_ALCEMY_API_KEY;
 let mnemonic = process.env.MNEMONIC as string;
 let accountIndex = 1;
-let contractAddress = "0xf01242EfB1695C5C12d45F7cc20e421D24eE1ECE";
+let contractAddress = "0x5E945200e9eFF3d4414a4466B5008643dceC7073";
 let gasPct = 150;
 let gasPricePct = 150;
 
 if (process.env.network == "polygon") {
     network = 137n;
     apiKey = process.env.POLYGON_ALCEMY_API_KEY;
-    contractAddress = "0xE50Dc56c80C09800f76D788608Ed015bA3a6B83D";
+    contractAddress = "0x8049e605F1807aC05643c790a632E08f678f763C";
     gasPct = 125;
     gasPricePct = 125;
     console.log("Using Polygon setup");
