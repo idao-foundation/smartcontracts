@@ -22,7 +22,6 @@ contract BadgeContract is
     }
 
     BetContract public betContract;
-    address public fundingWallet;
     bool private allowUpgrade;
     uint256 public badgeCount;
 
@@ -49,13 +48,11 @@ contract BadgeContract is
 
     function initialize(
         address initialAuthority_,
-        BetContract betContract_,
-        address fundingWallet_
+        BetContract betContract_
     ) external initializer {
         __AccessManaged_init(initialAuthority_);
         __UUPSUpgradeable_init();
 
-        fundingWallet = fundingWallet_;
         betContract = betContract_;
     }
 
@@ -87,8 +84,6 @@ contract BadgeContract is
         if (msg.value != feePrice) {
             revert IncorrectFeeAmount();
         }
-
-        payable(fundingWallet).sendValue(msg.value);
 
         claimedBadges[msg.sender].push(_badgeId);
 
@@ -128,14 +123,21 @@ contract BadgeContract is
     }
 
     /**
-     * @notice Set a funding wallet to receive fees.
-     * @param _fundingWallet The new funding wallet address.
+     * @notice Rescues stuck tokens or native coins from the contract to the specified address.
+     * @param _token The address of the token to be withdrawn.
+     * @param _to The address to which the tokens will be transferred.
+     * @param _amount The amount of stuck tokens.
      */
-    function setFundingWallet(address _fundingWallet) external restricted {
-        if (_fundingWallet == address(0)) {
-            revert ZeroAddress();
+    function rescueERC20OrNative(
+        address _token,
+        address _to,
+        uint256 _amount
+    ) external restricted {
+        if (_token == address(0)) {
+            payable(_to).sendValue(_amount);
+        } else {
+            IERC20(_token).transfer(_to, _amount);
         }
-        fundingWallet = _fundingWallet;
     }
 
     /**

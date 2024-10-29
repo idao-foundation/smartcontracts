@@ -11,15 +11,17 @@ import {
     SlotManager__factory,
     BadgeContract,
     BadgeContract__factory,
+    BUSDMock,
+    BUSDMock__factory
 } from "../typechain-types";
 
 import { reset } from "@nomicfoundation/hardhat-toolbox/network-helpers"
 describe("BadgeContract", () => {
     let badgeContract: BadgeContract;
-    let fundingWallet: HardhatEthersSigner;
     let manager: AccessManager;
     let slotManager: SlotManager;
     let betContract: BetContract;
+    let busdMock: BUSDMock;
     let admin: HardhatEthersSigner;
     let addr1: HardhatEthersSigner;
     const globalSlotLimit = 5;
@@ -31,7 +33,10 @@ describe("BadgeContract", () => {
     });
 
     beforeEach(async () => {
-        [admin, fundingWallet, addr1] = await ethers.getSigners();
+        [admin, addr1] = await ethers.getSigners();
+
+        const BUSDMock = (await ethers.getContractFactory('BUSDMock')) as BUSDMock__factory;
+        busdMock = await BUSDMock.deploy();
 
         const Manager = (await ethers.getContractFactory('AccessManager')) as AccessManager__factory;
         manager = await Manager.deploy(admin.address);
@@ -53,7 +58,7 @@ describe("BadgeContract", () => {
         const BadgeContract = (await ethers.getContractFactory('BadgeContract')) as BadgeContract__factory;
         badgeContract = await upgrades.deployProxy(
             BadgeContract,
-            [manager.target, betContract.target, fundingWallet.address],
+            [manager.target, betContract.target],
             { initializer: 'initialize', kind: 'uups' }
         ) as unknown as BadgeContract;
     });
@@ -63,9 +68,6 @@ describe("BadgeContract", () => {
             /* ASSERT */
             const [isAdmin,] = await manager.hasRole(ADMIN_ROLE, admin.address);
             expect(isAdmin).to.equal(true);
-
-            const fundingWalletAddress = await badgeContract.fundingWallet();
-            expect(fundingWalletAddress).to.equal(fundingWallet.address);
 
             const betContractAddress = await badgeContract.betContract();
             expect(betContractAddress).to.equal(betContract.target);
@@ -172,42 +174,6 @@ describe("BadgeContract", () => {
 
             /* EXECUTE */
             const promise = badgeContract.connect(addr1).updateBadge(1, updatedBets, updatedFee);
-
-            /* ASSERT */
-            await expect(promise).to.be.revertedWithCustomError(
-                badgeContract, 'AccessManagedUnauthorized'
-            ).withArgs(addr1.address);
-        });
-    });
-
-    describe('setFundingWallet', async () => {
-        it('sets funding wallet successfully', async () => {
-            /* SETUP */
-            const fundingWalletBefore = await badgeContract.fundingWallet();
-
-            /* EXECUTE */
-            await badgeContract.connect(admin).setFundingWallet(addr1.address);
-
-            /* ASSERT */
-            const fundingWalletAfter = await badgeContract.fundingWallet();
-
-            expect(fundingWalletAfter).to.not.equal(fundingWalletBefore);
-            expect(fundingWalletAfter).to.equal(addr1.address);
-        });
-
-        it('rejects setting while zero address', async () => {
-            /* EXECUTE */
-            const promise = badgeContract.connect(admin).setFundingWallet(ZeroAddress);
-
-            /* ASSERT */
-            await expect(promise).to.be.revertedWithCustomError(
-                badgeContract, 'ZeroAddress'
-            );
-        });
-
-        it('rejects if not admin role', async () => {
-            /* EXECUTE */
-            const promise = badgeContract.connect(addr1).setFundingWallet(addr1.address);
 
             /* ASSERT */
             await expect(promise).to.be.revertedWithCustomError(
@@ -346,7 +312,7 @@ describe("BadgeContract", () => {
 
             await betContract.setUserBetCount(requiredBets, addr1.address);
 
-            const fundingWalletBalanceBefore = await ethers.provider.getBalance(fundingWallet.address);
+            const contractBalanceBefore = await ethers.provider.getBalance(badgeContract.target);
             const addr1BalanceBefore = await ethers.provider.getBalance(addr1.address);
 
             /* EXECUTE */
@@ -356,10 +322,10 @@ describe("BadgeContract", () => {
             const minedTx = await tx.wait();
             const fee: bigint = BigInt(minedTx!.gasUsed * minedTx!.gasPrice);
 
-            const fundingWalletBalanceAfter = await ethers.provider.getBalance(fundingWallet.address);
+            const contractBalanceAfter = await ethers.provider.getBalance(badgeContract.target);
             const addr1BalanceAfter = await ethers.provider.getBalance(addr1.address);
 
-            expect(fundingWalletBalanceAfter).to.equal(fundingWalletBalanceBefore + feePrice);
+            expect(contractBalanceAfter).to.equal(contractBalanceBefore + feePrice);
             expect(addr1BalanceAfter).to.equal(addr1BalanceBefore - feePrice - fee);
 
             const claimedBadges = await badgeContract.getClaimedBadges(addr1.address);
@@ -537,6 +503,71 @@ describe("BadgeContract", () => {
 
             /* ASSERT */
             expect(lastClaimedBadge).to.equal(0);
+        });
+    });
+
+    describe('rescueERC20OrNative', async () => {
+        it('should allow the admin to rescue ERC20', async function () {
+            /* SETUP */
+            const to = admin.address;
+            const amount = ethers.parseUnits('1', 18);
+            const rescueAmount = ethers.parseUnits('0.5', 18);
+
+            // Transfer some tokens to the contract
+            await busdMock.mint(betContract.target, amount);
+
+            /* ASSERT */
+            const ownerBalanceBefore = await busdMock.balanceOf(to);
+
+            expect(await busdMock.balanceOf(betContract.target)).to.equal(amount);
+
+            /* EXECUTE */
+            await betContract.connect(admin).rescueERC20OrNative(busdMock.target, to, rescueAmount);
+
+            /* ASSERT */
+            const ownerBalanceAfter = await busdMock.balanceOf(to);
+
+            expect(ownerBalanceAfter).to.equal(ownerBalanceBefore + rescueAmount);
+            expect(await busdMock.balanceOf(betContract.target)).to.equal(amount - rescueAmount);
+        });
+
+        it('should allow the admin to rescue native coins', async function () {
+            /* SETUP */
+            const to = admin.address;
+            const amount = ethers.parseUnits('1');
+            const rescueAmount = ethers.parseUnits('0.5');
+
+            // Send native coins to the contract address
+            await admin.sendTransaction({
+                to: betContract.target,
+                value: amount
+            });
+
+            const ownerBalanceBefore = await ethers.provider.getBalance(to);
+
+            /* EXECUTE */
+            const tx = await betContract.connect(admin).rescueERC20OrNative(ZeroAddress, to, rescueAmount);
+
+            /* ASSERT */
+            const minedTx = await tx.wait();
+            const fee: bigint = BigInt(minedTx!.gasUsed * minedTx!.gasPrice);
+            const ownerBalanceAfter = await ethers.provider.getBalance(to);
+
+            expect(ownerBalanceAfter).to.equal(ownerBalanceBefore + rescueAmount - fee);
+            expect(await ethers.provider.getBalance(betContract.target)).to.equal(amount - rescueAmount);
+        });
+
+        it('rejects if not admin role', async function () {
+            /* SETUP */
+            const amount = ethers.parseUnits('1', 18);
+
+            /* EXECUTE */
+            const promise = betContract.connect(addr1).rescueERC20OrNative(busdMock.target, addr1.address, amount);
+
+            /* ASSERT */
+            await expect(promise).to.be.revertedWithCustomError(
+                slotManager, 'AccessManagedUnauthorized'
+            ).withArgs(addr1.address);
         });
     });
 });

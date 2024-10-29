@@ -495,6 +495,7 @@ describe('BetContract', () => {
             /* SETUP */
             const to = admin.address;
             const amount = ethers.parseUnits('1', 18);
+            const rescueAmount = ethers.parseUnits('0.5', 18);
 
             // Transfer some tokens to the contract
             await busdMock.mint(betContract.target, amount);
@@ -505,19 +506,20 @@ describe('BetContract', () => {
             expect(await busdMock.balanceOf(betContract.target)).to.equal(amount);
 
             /* EXECUTE */
-            await betContract.connect(admin).rescueERC20OrNative(busdMock.target, to, amount);
+            await betContract.connect(admin).rescueERC20OrNative(busdMock.target, to, rescueAmount);
 
             /* ASSERT */
             const ownerBalanceAfter = await busdMock.balanceOf(to);
 
-            expect(ownerBalanceAfter).to.equal(ownerBalanceBefore + amount);
-            expect(await busdMock.balanceOf(betContract.target)).to.equal(0);
+            expect(ownerBalanceAfter).to.equal(ownerBalanceBefore + rescueAmount);
+            expect(await busdMock.balanceOf(betContract.target)).to.equal(amount - rescueAmount);
         });
 
         it('should allow the admin to rescue native coins', async function () {
             /* SETUP */
             const to = admin.address;
             const amount = ethers.parseUnits('1');
+            const rescueAmount = ethers.parseUnits('0.5');
 
             // Send native coins to the contract address
             await admin.sendTransaction({
@@ -528,14 +530,15 @@ describe('BetContract', () => {
             const ownerBalanceBefore = await ethers.provider.getBalance(to);
 
             /* EXECUTE */
-            const tx = await betContract.connect(admin).rescueERC20OrNative(ZeroAddress, to, amount);
+            const tx = await betContract.connect(admin).rescueERC20OrNative(ZeroAddress, to, rescueAmount);
 
             /* ASSERT */
             const minedTx = await tx.wait();
             const fee: bigint = BigInt(minedTx!.gasUsed * minedTx!.gasPrice);
             const ownerBalanceAfter = await ethers.provider.getBalance(to);
 
-            expect(ownerBalanceAfter).to.be.equal(ownerBalanceBefore + amount - fee);
+            expect(ownerBalanceAfter).to.equal(ownerBalanceBefore + rescueAmount - fee);
+            expect(await ethers.provider.getBalance(betContract.target)).to.equal(amount - rescueAmount);
         });
 
         it('rejects if not admin role', async function () {
