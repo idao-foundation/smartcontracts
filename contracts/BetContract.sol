@@ -391,7 +391,7 @@ contract BetContract is
         uint256 _amount
     ) external restricted {
         if (_token == address(0)) {
-            payable(_to).sendValue(address(this).balance);
+            payable(_to).sendValue(_amount);
         } else {
             IERC20(_token).transfer(_to, _amount);
         }
