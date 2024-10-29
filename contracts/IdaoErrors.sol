@@ -23,4 +23,7 @@ contract IdaoErrors {
     error NoSlotsToFree();
     error InvalidSignature();
     error InvalidNonce();
+    error InvalidBadgeId();
+    error InsufficientBets();
+    error BadgeAlreadyClaimed();
 }
